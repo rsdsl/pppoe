@@ -6,3 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+pppoe = { git = "https://github.com/Istvan91/pppoe-rs", version = "0.1.0", features = ["socket"] }
+thiserror = "1.0"
