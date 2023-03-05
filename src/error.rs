@@ -10,6 +10,8 @@ pub enum Error {
     PartialRequest,
     #[error("expected PADO, got {0}")]
     ExpectedPado(u8),
+    #[error("expected PADS, got {0}")]
+    ExpectedPads(u8),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
