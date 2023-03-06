@@ -6,12 +6,12 @@ use thiserror::Error;
 pub enum Error {
     #[error("usage: missing interface argument")]
     MissingInterface,
+    #[error("client has already been started")]
+    AlreadyActive,
     #[error("bytes transmitted is not equal to request size")]
     PartialRequest,
-    #[error("expected PADO, got {0}")]
-    ExpectedPado(u8),
-    #[error("expected PADS, got {0}")]
-    ExpectedPads(u8),
+    #[error("invalid packet code {0}")]
+    InvalidCode(u8),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
