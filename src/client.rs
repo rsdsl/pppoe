@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use pppoe::header::{PADO, PADS};
+use pppoe::header::{PADO, PADS, PADT};
 use pppoe::packet::PPPOE_DISCOVERY;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -192,6 +192,14 @@ impl Client {
                     } else {
                         Err(Error::UnexpectedPads(remote_mac_str.clone()))
                     }
+                }
+                PADT => {
+                    self.set_state(State::Terminated);
+
+                    self.inner.lock().unwrap().socket.close();
+
+                    println!("session terminated by peer, MAC {}", remote_mac_str);
+                    return Err(Error::Terminated);
                 }
                 _ => Err(Error::InvalidCode(code)),
             } {

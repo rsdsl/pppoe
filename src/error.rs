@@ -14,6 +14,8 @@ pub enum Error {
     InvalidCode(u8),
     #[error("unexpected PADS from MAC {0}")]
     UnexpectedPads(String),
+    #[error("session terminated by peer")]
+    Terminated,
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
