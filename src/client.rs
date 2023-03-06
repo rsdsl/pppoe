@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use pppoe::header::PADO;
+use pppoe::header::{PADO, PADS};
 use pppoe::packet::PPPOE_DISCOVERY;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -11,6 +11,21 @@ use pppoe::Socket;
 use pppoe::Tag;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum State {
+    Idle,
+    Discovery,
+    Requesting,
+    Session,
+    Terminated,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Client {
@@ -26,6 +41,7 @@ impl Client {
                 socket: Socket::on_interface(interface)?,
                 started: false,
                 host_uniq,
+                state: State::default(),
             })),
         })
     }
@@ -41,6 +57,14 @@ impl Client {
         } else {
             Err(Error::AlreadyActive)
         }
+    }
+
+    fn state(&self) -> State {
+        self.inner.lock().unwrap().state
+    }
+
+    fn set_state(&self, state: State) {
+        self.inner.lock().unwrap().state = state;
     }
 
     fn new_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
@@ -72,6 +96,10 @@ impl Client {
     }
 
     fn discover(&self) -> Result<()> {
+        if self.state() != State::Idle {
+            return Err(Error::AlreadyActive);
+        }
+
         let host_uniq = self.inner.lock().unwrap().host_uniq;
 
         let mut discovery = [0; 14 + 6 + 4 + 20];
@@ -82,6 +110,8 @@ impl Client {
 
         self.new_packet(BROADCAST, &mut discovery)?;
         self.send(&discovery)?;
+
+        self.set_state(State::Discovery);
 
         println!("sent PADI");
 
@@ -124,8 +154,44 @@ impl Client {
                         }
                     });
 
-                    println!("offer from MAC {}, AC {}", remote_mac_str, ac_name);
+                    if self.state() == State::Discovery {
+                        println!(
+                            "accepting offer from MAC {}, AC {}",
+                            remote_mac_str, ac_name
+                        );
+
+                        let mut request = [0; 14 + 6 + 4 + 24];
+                        let mut request_header = HeaderBuilder::create_padr(&mut request[14..])?;
+
+                        request_header.add_tag(Tag::ServiceName(b""))?;
+
+                        if let Some(ac_cookie) = ac_cookie {
+                            request_header.add_tag(Tag::AcCookie(ac_cookie))?;
+                        }
+
+                        self.new_packet(remote_mac, &mut request)?;
+                        self.send(&request)?;
+
+                        self.set_state(State::Requesting);
+
+                        println!("sent PADR");
+                    } else {
+                        println!("ignoring offer from MAC {}, AC {}", remote_mac_str, ac_name);
+                    }
+
                     Ok(())
+                }
+                PADS => {
+                    if self.state() == State::Requesting {
+                        let session_id = header.session_id();
+
+                        self.set_state(State::Session);
+                        println!("session established, ID {}", session_id);
+
+                        Ok(())
+                    } else {
+                        Err(Error::UnexpectedPads(remote_mac_str.clone()))
+                    }
                 }
                 _ => Err(Error::InvalidCode(code)),
             } {
@@ -141,4 +207,5 @@ struct ClientRef {
     socket: Socket,
     started: bool,
     host_uniq: [u8; 16],
+    state: State,
 }

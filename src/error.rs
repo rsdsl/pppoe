@@ -12,6 +12,8 @@ pub enum Error {
     PartialRequest,
     #[error("invalid packet code {0}")]
     InvalidCode(u8),
+    #[error("unexpected PADS from MAC {0}")]
+    UnexpectedPads(String),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
