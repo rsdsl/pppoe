@@ -42,7 +42,7 @@ impl Client<'static> {
             password: password.as_bytes(),
         };
 
-        Ok(Self {
+        let clt = Self {
             inner: Arc::new(Mutex::new(ClientRef {
                 socket: Socket::on_interface(interface)?,
                 session: PPPoS::new(config),
@@ -50,7 +50,11 @@ impl Client<'static> {
                 host_uniq,
                 state: State::default(),
             })),
-        })
+        };
+
+        clt.inner.lock().unwrap().session.put_rx_buf([0; 1024]);
+
+        Ok(clt)
     }
 
     pub fn run(self) -> Result<()> {
@@ -232,7 +236,7 @@ impl Client<'static> {
 
 struct ClientRef<'a> {
     socket: Socket,
-    session: PPPoS<'a, &'a mut [u8]>,
+    session: PPPoS<'a, [u8; 1024]>,
     started: bool,
     host_uniq: [u8; 16],
     state: State,
