@@ -18,6 +18,8 @@ pub enum Error {
     Terminated,
     #[error("invalid PPP sub-protocol {0}")]
     InvalidProtocol(u16),
+    #[error("invalid LCP code {0}")]
+    InvalidLcpCode(u8),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]

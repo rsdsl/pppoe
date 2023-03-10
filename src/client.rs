@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use pppoe::header::{PADO, PADS, PADT, PPP};
+use pppoe::lcp::{ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
 use pppoe::packet::PPPOE_DISCOVERY;
+use pppoe::ppp::LCP;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
@@ -139,6 +141,21 @@ impl Client {
                     let protocol = ppp.protocol();
 
                     match protocol {
+                        LCP => {
+                            let lcp = pppoe::lcp::Header::with_buffer(ppp.payload())?;
+                            let lcp_code = lcp.code();
+
+                            match lcp_code {
+                                CONFIGURE_REQUEST => {
+                                    let opts: Vec<ConfigOption> =
+                                        ConfigOptionIterator::new(lcp.payload()).collect();
+
+                                    println!("received configuration request, options: {:?}", opts);
+                                    Ok(())
+                                }
+                                _ => Err(Error::InvalidLcpCode(lcp_code)),
+                            }
+                        }
                         _ => Err(Error::InvalidProtocol(protocol)),
                     }
                 }
