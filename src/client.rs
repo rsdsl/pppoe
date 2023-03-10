@@ -3,13 +3,12 @@ use crate::error::{Error, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use pppoe::header::{PADO, PADS, PADT, PPP};
+use pppoe::header::{PADO, PADS, PADT};
 use pppoe::packet::PPPOE_DISCOVERY;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
 use pppoe::Tag;
-use ppproto::pppos::PPPoS;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
@@ -28,24 +27,18 @@ impl Default for State {
     }
 }
 
-#[derive(Clone)]
-pub struct Client<'a> {
-    inner: Arc<Mutex<ClientRef<'a>>>,
+#[derive(Clone, Debug)]
+pub struct Client {
+    inner: Arc<Mutex<ClientRef>>,
 }
 
-impl Client<'static> {
-    pub fn new(interface: &str, username: &'static str, password: &'static str) -> Result<Self> {
+impl Client {
+    pub fn new(interface: &str) -> Result<Self> {
         let host_uniq = rand::random();
-
-        let config = ppproto::Config {
-            username: username.as_bytes(),
-            password: password.as_bytes(),
-        };
 
         Ok(Self {
             inner: Arc::new(Mutex::new(ClientRef {
                 socket: Socket::on_interface(interface)?,
-                session: PPPoS::new(config),
                 started: false,
                 host_uniq,
                 state: State::default(),
@@ -125,13 +118,6 @@ impl Client<'static> {
         Ok(())
     }
 
-    fn process_session_data(&self, data: &[u8]) {
-        let n = self.inner.lock().unwrap().session.consume(data);
-        if n < data.len() {
-            self.process_session_data(&data[n..]);
-        }
-    }
-
     fn recv_loop(&self) -> Result<()> {
         loop {
             let mut buf = [0; 1024];
@@ -148,12 +134,6 @@ impl Client<'static> {
                 .unwrap();
 
             match match code {
-                PPP => {
-                    let ppp_payload = header.payload();
-                    self.process_session_data(ppp_payload);
-
-                    Ok(())
-                }
                 PADO => {
                     let ac_name = header
                         .tags()
@@ -230,9 +210,9 @@ impl Client<'static> {
     }
 }
 
-struct ClientRef<'a> {
+#[derive(Debug)]
+struct ClientRef {
     socket: Socket,
-    session: PPPoS<'a, &'a mut [u8]>,
     started: bool,
     host_uniq: [u8; 16],
     state: State,
