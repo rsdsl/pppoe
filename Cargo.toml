@@ -7,6 +7,5 @@ edition = "2021"
 
 [dependencies]
 pppoe = { git = "https://github.com/rsdsl/pppoe-rs", version = "0.1.0", features = ["socket"] }
-ppproto = { git = "https://github.com/embassy-rs/ppproto", version = "0.1.0" }
 rand = "0.8.5"
 thiserror = "1.0"
