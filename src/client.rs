@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use pppoe::header::{PADO, PADS, PADT};
+use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::packet::PPPOE_DISCOVERY;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -134,6 +134,14 @@ impl Client {
                 .unwrap();
 
             match match code {
+                PPP => {
+                    let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
+                    let protocol = ppp.protocol();
+
+                    match protocol {
+                        _ => Err(Error::InvalidProtocol(protocol)),
+                    }
+                }
                 PADO => {
                     let ac_name = header
                         .tags()

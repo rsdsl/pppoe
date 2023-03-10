@@ -16,6 +16,8 @@ pub enum Error {
     UnexpectedPads(String),
     #[error("session terminated by peer")]
     Terminated,
+    #[error("invalid PPP sub-protocol {0}")]
+    InvalidProtocol(u16),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
