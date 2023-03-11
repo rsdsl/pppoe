@@ -16,6 +16,8 @@ pub enum Error {
     UnexpectedPads(String),
     #[error("session terminated by peer")]
     Terminated,
+    #[error("session ID is zero")]
+    ZeroSession,
     #[error("invalid PPP sub-protocol {0}")]
     InvalidProtocol(u16),
     #[error("invalid LCP code {0}")]

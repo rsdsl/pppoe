@@ -1,11 +1,13 @@
 use crate::error::{Error, Result};
 
+use std::cmp::min;
+use std::num::NonZeroU16;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
-use pppoe::packet::PPPOE_DISCOVERY;
+use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::LCP;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -81,6 +83,18 @@ impl Client {
         Ok(())
     }
 
+    fn new_session_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
+        let local_mac = self.inner.lock().unwrap().socket.mac_address();
+
+        let mut ethernet_header = pppoe::eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
+
+        ethernet_header.set_src_address(local_mac);
+        ethernet_header.set_dst_address(dst_mac);
+        ethernet_header.set_ether_type(PPPOE_SESSION);
+
+        Ok(())
+    }
+
     fn send(&self, buf: &[u8]) -> Result<()> {
         let n = self.inner.lock().unwrap().socket.send(buf)?;
         if n != buf.len() {
@@ -151,6 +165,30 @@ impl Client {
                                         ConfigOptionIterator::new(lcp.payload()).collect();
 
                                     println!("received configuration request, options: {:?}", opts);
+
+                                    let mut ack = [0; 1024];
+                                    let limit = min(ack.len() - 26, lcp.payload().len());
+                                    ack[26..26 + limit].copy_from_slice(lcp.payload());
+
+                                    pppoe::lcp::HeaderBuilder::create_configure_ack(
+                                        &mut ack[22..],
+                                        lcp.identifier(),
+                                    )?;
+
+                                    pppoe::ppp::HeaderBuilder::create_packet(
+                                        &mut ack[20..],
+                                        pppoe::ppp::Protocol::Lcp,
+                                    )?;
+
+                                    let session = NonZeroU16::new(header.session_id())
+                                        .ok_or(Error::ZeroSession)?;
+
+                                    HeaderBuilder::create_ppp(&mut ack[14..], session)?;
+
+                                    self.new_session_packet(remote_mac, &mut ack)?;
+                                    self.send(&ack)?;
+
+                                    println!("ackknowledged configuration");
                                     Ok(())
                                 }
                                 _ => Err(Error::InvalidLcpCode(lcp_code)),
