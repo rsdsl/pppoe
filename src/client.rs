@@ -3,10 +3,11 @@ use crate::error::{Error, Result};
 use std::num::NonZeroU16;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
-use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
+use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_REQUEST};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
 use pppoe::Header;
@@ -47,6 +48,7 @@ impl Client {
                 started: false,
                 host_uniq,
                 state: State::default(),
+                peer: BROADCAST,
             })),
         })
     }
@@ -79,43 +81,51 @@ impl Client {
         }
     }
 
-    fn new_discovery_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
+    fn peer(&self) -> [u8; 6] {
+        self.inner.lock().unwrap().peer
+    }
+
+    fn set_peer(&self, peer: [u8; 6]) {
+        self.inner.lock().unwrap().peer = peer;
+    }
+
+    fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
         let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
         ethernet_header.set_src_address(local_mac);
-        ethernet_header.set_dst_address(dst_mac);
+        ethernet_header.set_dst_address(self.peer());
         ethernet_header.set_ether_type(PPPOE_DISCOVERY);
 
         Ok(())
     }
 
-    fn new_session_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
+    fn new_session_packet(&self, buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
         let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
         ethernet_header.set_src_address(local_mac);
-        ethernet_header.set_dst_address(dst_mac);
+        ethernet_header.set_dst_address(self.peer());
         ethernet_header.set_ether_type(PPPOE_SESSION);
 
         Ok(())
     }
 
-    fn new_ppp_packet(&self, dst_mac: [u8; 6], protocol: Protocol, buf: &mut [u8]) -> Result<()> {
+    fn new_ppp_packet(&self, protocol: Protocol, buf: &mut [u8]) -> Result<()> {
         ppp::HeaderBuilder::create_packet(&mut buf[20..], protocol)?;
 
         let session_id = self.session_id()?;
         HeaderBuilder::create_ppp(&mut buf[14..], session_id)?;
 
-        self.new_session_packet(dst_mac, buf)?;
+        self.new_session_packet(buf)?;
 
         Ok(())
     }
 
-    fn new_lcp_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
-        self.new_ppp_packet(dst_mac, Protocol::Lcp, buf)
+    fn new_lcp_packet(&self, buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(Protocol::Lcp, buf)
     }
 
     fn send(&self, buf: &[u8]) -> Result<()> {
@@ -147,7 +157,7 @@ impl Client {
         discovery_header.add_tag(Tag::ServiceName(b""))?;
         discovery_header.add_tag(Tag::HostUniq(&host_uniq))?;
 
-        self.new_discovery_packet(BROADCAST, &mut discovery)?;
+        self.new_discovery_packet(&mut discovery)?;
         self.send(&discovery)?;
 
         self.set_state(State::Discovery);
@@ -162,20 +172,39 @@ impl Client {
             _ => return Err(Error::AlreadyActive),
         }
 
+        let mut opts = ConfigOptions::default();
+
+        opts.add_option(ConfigOption::Mru(1452));
+        opts.add_option(ConfigOption::MagicNumber(rand::random()));
+
+        let limit = opts.len();
+
+        let mut request = Vec::new();
+        request.resize(14 + 6 + 2 + 4 + limit, 0);
+
+        let request = request.as_mut_slice();
+        opts.write_to_buffer(&mut request[26..26 + limit])?;
+
+        lcp::HeaderBuilder::create_configure_request(&mut request[22..26 + limit])?;
+
+        self.new_lcp_packet(request)?;
+        self.send(request)?;
+
+        println!("requested configuration");
         Ok(())
     }
 
-    fn handle_ppp(&self, src_mac: [u8; 6], header: &Header) -> Result<()> {
+    fn handle_ppp(&self, header: &Header) -> Result<()> {
         let ppp = ppp::Header::with_buffer(header.payload())?;
         let protocol = ppp.protocol();
 
         match protocol {
-            LCP => self.handle_lcp(src_mac, ppp),
+            LCP => self.handle_lcp(ppp),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
     }
 
-    fn handle_lcp(&self, src_mac: [u8; 6], header: ppp::Header) -> Result<()> {
+    fn handle_lcp(&self, header: ppp::Header) -> Result<()> {
         let lcp = lcp::Header::with_buffer(header.payload())?;
         let lcp_code = lcp.code();
 
@@ -198,7 +227,7 @@ impl Client {
                     lcp.identifier(),
                 )?;
 
-                self.new_lcp_packet(src_mac, ack)?;
+                self.new_lcp_packet(ack)?;
                 self.send(ack)?;
 
                 println!("ackknowledged configuration");
@@ -226,9 +255,9 @@ impl Client {
             match match code {
                 PPP => {
                     if let State::Session(_) = self.state() {
-                        self.handle_ppp(remote_mac, header)
+                        self.handle_ppp(header)
                     } else {
-                        Err(Error::UnexpectedPpp(remote_mac_str.clone()))
+                        Err(Error::UnexpectedPpp)
                     }
                 }
                 PADO => {
@@ -257,6 +286,8 @@ impl Client {
                             remote_mac_str, ac_name
                         );
 
+                        self.set_peer(remote_mac);
+
                         let mut request = [0; 14 + 6 + 4 + 24];
                         let mut request_header = HeaderBuilder::create_padr(&mut request[14..])?;
 
@@ -266,7 +297,7 @@ impl Client {
                             request_header.add_tag(Tag::AcCookie(ac_cookie))?;
                         }
 
-                        self.new_discovery_packet(remote_mac, &mut request)?;
+                        self.new_discovery_packet(&mut request)?;
                         self.send(&request)?;
 
                         self.set_state(State::Requesting);
@@ -286,11 +317,12 @@ impl Client {
                         self.set_state(State::Session(session_id));
                         println!("session established, ID {}", session_id);
 
+                        thread::sleep(Duration::from_secs(1));
                         self.configure()?;
 
                         Ok(())
                     } else {
-                        Err(Error::UnexpectedPads(remote_mac_str.clone()))
+                        Err(Error::UnexpectedPads)
                     }
                 }
                 PADT => {
@@ -316,4 +348,5 @@ struct ClientRef {
     started: bool,
     host_uniq: [u8; 16],
     state: State,
+    peer: [u8; 6],
 }

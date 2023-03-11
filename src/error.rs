@@ -14,14 +14,14 @@ pub enum Error {
     PartialRequest,
     #[error("invalid packet code {0}")]
     InvalidCode(u8),
-    #[error("unexpected PADS from MAC {0}")]
-    UnexpectedPads(String),
+    #[error("unexpected PADS")]
+    UnexpectedPads,
     #[error("session terminated by peer")]
     Terminated,
     #[error("session ID is zero")]
     ZeroSession,
-    #[error("unexpected PPP session traffic from MAC {0}")]
-    UnexpectedPpp(String),
+    #[error("unexpected PPP session traffic")]
+    UnexpectedPpp,
     #[error("invalid PPP sub-protocol {0}")]
     InvalidProtocol(u16),
     #[error("invalid LCP code {0}")]
