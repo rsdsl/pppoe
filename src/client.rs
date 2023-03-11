@@ -153,7 +153,6 @@ impl Client {
         self.set_state(State::Discovery);
 
         println!("sent PADI");
-
         Ok(())
     }
 
@@ -167,7 +166,7 @@ impl Client {
     }
 
     fn handle_ppp(&self, src_mac: [u8; 6], header: &Header) -> Result<()> {
-        let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
+        let ppp = ppp::Header::with_buffer(header.payload())?;
         let protocol = ppp.protocol();
 
         match protocol {
