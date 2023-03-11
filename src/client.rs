@@ -157,6 +157,15 @@ impl Client {
         Ok(())
     }
 
+    fn configure(&self) -> Result<()> {
+        match self.state() {
+            State::Session(_) => {}
+            _ => return Err(Error::AlreadyActive),
+        }
+
+        Ok(())
+    }
+
     fn handle_ppp(&self, src_mac: [u8; 6], header: &Header) -> Result<()> {
         let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
         let protocol = ppp.protocol();
@@ -277,6 +286,8 @@ impl Client {
 
                         self.set_state(State::Session(session_id));
                         println!("session established, ID {}", session_id);
+
+                        self.configure()?;
 
                         Ok(())
                     } else {
