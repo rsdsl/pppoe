@@ -230,7 +230,7 @@ checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 [[package]]
 name = "pppoe"
 version = "0.1.0"
-source = "git+https://github.com/rsdsl/pppoe-rs#b8ee7fc9790ac403099b6614845c1b40b4b6c4d1"
+source = "git+https://github.com/rsdsl/pppoe-rs#a2f02c35ce06a3ac8c805cc034538f618c0cf07f"
 dependencies = [
  "byteorder",
  "libc",
@@ -241,7 +241,7 @@ dependencies = [
 [[package]]
 name = "pppoe-sys"
 version = "0.1.0"
-source = "git+https://github.com/rsdsl/pppoe-rs#b8ee7fc9790ac403099b6614845c1b40b4b6c4d1"
+source = "git+https://github.com/rsdsl/pppoe-rs#a2f02c35ce06a3ac8c805cc034538f618c0cf07f"
 dependencies = [
  "bindgen",
  "cc",
