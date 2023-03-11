@@ -7,7 +7,7 @@ use std::thread;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
-use pppoe::ppp::LCP;
+use pppoe::ppp::{self, Protocol, LCP};
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
@@ -20,7 +20,7 @@ enum State {
     Idle,
     Discovery,
     Requesting,
-    Session,
+    Session(NonZeroU16),
     Terminated,
 }
 
@@ -70,6 +70,13 @@ impl Client {
         self.inner.lock().unwrap().state = state;
     }
 
+    fn session_id(&self) -> Result<NonZeroU16> {
+        match self.state() {
+            State::Session(session_id) => Ok(session_id),
+            _ => Err(Error::NoSession),
+        }
+    }
+
     fn new_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
@@ -92,6 +99,21 @@ impl Client {
         ethernet_header.set_ether_type(PPPOE_SESSION);
 
         Ok(())
+    }
+
+    fn new_ppp_packet(&self, dst_mac: [u8; 6], protocol: Protocol, buf: &mut [u8]) -> Result<()> {
+        ppp::HeaderBuilder::create_packet(&mut buf[20..], protocol)?;
+
+        let session_id = self.session_id()?;
+        HeaderBuilder::create_ppp(&mut buf[14..], session_id)?;
+
+        self.new_session_packet(dst_mac, buf)?;
+
+        Ok(())
+    }
+
+    fn new_lcp_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(dst_mac, Protocol::Lcp, buf)
     }
 
     fn send(&self, buf: &[u8]) -> Result<()> {
@@ -178,17 +200,7 @@ impl Client {
                                         lcp.identifier(),
                                     )?;
 
-                                    pppoe::ppp::HeaderBuilder::create_packet(
-                                        &mut ack[20..],
-                                        pppoe::ppp::Protocol::Lcp,
-                                    )?;
-
-                                    let session = NonZeroU16::new(header.session_id())
-                                        .ok_or(Error::ZeroSession)?;
-
-                                    HeaderBuilder::create_ppp(&mut ack[14..], session)?;
-
-                                    self.new_session_packet(remote_mac, ack)?;
+                                    self.new_lcp_packet(remote_mac, ack)?;
                                     self.send(ack)?;
 
                                     println!("ackknowledged configuration");
@@ -249,9 +261,10 @@ impl Client {
                 }
                 PADS => {
                     if self.state() == State::Requesting {
-                        let session_id = header.session_id();
+                        let session_id =
+                            NonZeroU16::new(header.session_id()).ok_or(Error::ZeroSession)?;
 
-                        self.set_state(State::Session);
+                        self.set_state(State::Session(session_id));
                         println!("session established, ID {}", session_id);
 
                         Ok(())

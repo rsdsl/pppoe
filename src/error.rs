@@ -8,6 +8,8 @@ pub enum Error {
     MissingInterface,
     #[error("client has already been started")]
     AlreadyActive,
+    #[error("no active PPPoE session")]
+    NoSession,
     #[error("bytes transmitted is not equal to request size")]
     PartialRequest,
     #[error("invalid packet code {0}")]
