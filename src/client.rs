@@ -1,6 +1,5 @@
 use crate::error::{Error, Result};
 
-use std::cmp::min;
 use std::num::NonZeroU16;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -166,12 +165,16 @@ impl Client {
 
                                     println!("received configuration request, options: {:?}", opts);
 
-                                    let mut ack = [0; 1024];
-                                    let limit = min(ack.len() - 26, lcp.payload().len());
+                                    let limit = lcp.payload().len();
+
+                                    let mut ack = Vec::new();
+                                    ack.resize(14 + 6 + 2 + 4 + 2 * limit, 0);
+
+                                    let ack = ack.as_mut_slice();
                                     ack[26..26 + limit].copy_from_slice(lcp.payload());
 
                                     pppoe::lcp::HeaderBuilder::create_configure_ack(
-                                        &mut ack[22..],
+                                        &mut ack[22..26 + limit],
                                         lcp.identifier(),
                                     )?;
 
@@ -185,8 +188,8 @@ impl Client {
 
                                     HeaderBuilder::create_ppp(&mut ack[14..], session)?;
 
-                                    self.new_session_packet(remote_mac, &mut ack)?;
-                                    self.send(&ack)?;
+                                    self.new_session_packet(remote_mac, ack)?;
+                                    self.send(ack)?;
 
                                     println!("ackknowledged configuration");
                                     Ok(())
