@@ -20,6 +20,8 @@ pub enum Error {
     Terminated,
     #[error("session ID is zero")]
     ZeroSession,
+    #[error("unexpected PPP session traffic from MAC {0}")]
+    UnexpectedPpp(String),
     #[error("invalid PPP sub-protocol {0}")]
     InvalidProtocol(u16),
     #[error("invalid LCP code {0}")]

@@ -172,44 +172,51 @@ impl Client {
 
             match match code {
                 PPP => {
-                    let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
-                    let protocol = ppp.protocol();
+                    if let State::Session(_) = self.state() {
+                        let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
+                        let protocol = ppp.protocol();
 
-                    match protocol {
-                        LCP => {
-                            let lcp = pppoe::lcp::Header::with_buffer(ppp.payload())?;
-                            let lcp_code = lcp.code();
+                        match protocol {
+                            LCP => {
+                                let lcp = pppoe::lcp::Header::with_buffer(ppp.payload())?;
+                                let lcp_code = lcp.code();
 
-                            match lcp_code {
-                                CONFIGURE_REQUEST => {
-                                    let opts: Vec<ConfigOption> =
-                                        ConfigOptionIterator::new(lcp.payload()).collect();
+                                match lcp_code {
+                                    CONFIGURE_REQUEST => {
+                                        let opts: Vec<ConfigOption> =
+                                            ConfigOptionIterator::new(lcp.payload()).collect();
 
-                                    println!("received configuration request, options: {:?}", opts);
+                                        println!(
+                                            "received configuration request, options: {:?}",
+                                            opts
+                                        );
 
-                                    let limit = lcp.payload().len();
+                                        let limit = lcp.payload().len();
 
-                                    let mut ack = Vec::new();
-                                    ack.resize(14 + 6 + 2 + 4 + limit, 0);
+                                        let mut ack = Vec::new();
+                                        ack.resize(14 + 6 + 2 + 4 + limit, 0);
 
-                                    let ack = ack.as_mut_slice();
-                                    ack[26..26 + limit].copy_from_slice(lcp.payload());
+                                        let ack = ack.as_mut_slice();
+                                        ack[26..26 + limit].copy_from_slice(lcp.payload());
 
-                                    pppoe::lcp::HeaderBuilder::create_configure_ack(
-                                        &mut ack[22..26 + limit],
-                                        lcp.identifier(),
-                                    )?;
+                                        pppoe::lcp::HeaderBuilder::create_configure_ack(
+                                            &mut ack[22..26 + limit],
+                                            lcp.identifier(),
+                                        )?;
 
-                                    self.new_lcp_packet(remote_mac, ack)?;
-                                    self.send(ack)?;
+                                        self.new_lcp_packet(remote_mac, ack)?;
+                                        self.send(ack)?;
 
-                                    println!("ackknowledged configuration");
-                                    Ok(())
+                                        println!("ackknowledged configuration");
+                                        Ok(())
+                                    }
+                                    _ => Err(Error::InvalidLcpCode(lcp_code)),
                                 }
-                                _ => Err(Error::InvalidLcpCode(lcp_code)),
                             }
+                            _ => Err(Error::InvalidProtocol(protocol)),
                         }
-                        _ => Err(Error::InvalidProtocol(protocol)),
+                    } else {
+                        Err(Error::UnexpectedPpp(remote_mac_str.clone()))
                     }
                 }
                 PADO => {
