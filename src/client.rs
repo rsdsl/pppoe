@@ -77,7 +77,7 @@ impl Client {
         }
     }
 
-    fn new_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
+    fn new_discovery_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
         let mut ethernet_header = pppoe::eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
@@ -145,7 +145,7 @@ impl Client {
         discovery_header.add_tag(Tag::ServiceName(b""))?;
         discovery_header.add_tag(Tag::HostUniq(&host_uniq))?;
 
-        self.new_packet(BROADCAST, &mut discovery)?;
+        self.new_discovery_packet(BROADCAST, &mut discovery)?;
         self.send(&discovery)?;
 
         self.set_state(State::Discovery);
@@ -247,7 +247,7 @@ impl Client {
                             request_header.add_tag(Tag::AcCookie(ac_cookie))?;
                         }
 
-                        self.new_packet(remote_mac, &mut request)?;
+                        self.new_discovery_packet(remote_mac, &mut request)?;
                         self.send(&request)?;
 
                         self.set_state(State::Requesting);
