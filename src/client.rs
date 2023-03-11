@@ -8,6 +8,7 @@ use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
+use pppoe::Header;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
@@ -155,6 +156,49 @@ impl Client {
         Ok(())
     }
 
+    fn handle_ppp(&self, src_mac: [u8; 6], header: &Header) -> Result<()> {
+        let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
+        let protocol = ppp.protocol();
+
+        match protocol {
+            LCP => self.handle_lcp(src_mac, ppp),
+            _ => Err(Error::InvalidProtocol(protocol)),
+        }
+    }
+
+    fn handle_lcp(&self, src_mac: [u8; 6], header: ppp::Header) -> Result<()> {
+        let lcp = pppoe::lcp::Header::with_buffer(header.payload())?;
+        let lcp_code = lcp.code();
+
+        match lcp_code {
+            CONFIGURE_REQUEST => {
+                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+
+                println!("received configuration request, options: {:?}", opts);
+
+                let limit = lcp.payload().len();
+
+                let mut ack = Vec::new();
+                ack.resize(14 + 6 + 2 + 4 + limit, 0);
+
+                let ack = ack.as_mut_slice();
+                ack[26..26 + limit].copy_from_slice(lcp.payload());
+
+                pppoe::lcp::HeaderBuilder::create_configure_ack(
+                    &mut ack[22..26 + limit],
+                    lcp.identifier(),
+                )?;
+
+                self.new_lcp_packet(src_mac, ack)?;
+                self.send(ack)?;
+
+                println!("ackknowledged configuration");
+                Ok(())
+            }
+            _ => Err(Error::InvalidLcpCode(lcp_code)),
+        }
+    }
+
     fn recv_loop(&self) -> Result<()> {
         loop {
             let mut buf = [0; 1024];
@@ -173,48 +217,7 @@ impl Client {
             match match code {
                 PPP => {
                     if let State::Session(_) = self.state() {
-                        let ppp = pppoe::ppp::Header::with_buffer(header.payload())?;
-                        let protocol = ppp.protocol();
-
-                        match protocol {
-                            LCP => {
-                                let lcp = pppoe::lcp::Header::with_buffer(ppp.payload())?;
-                                let lcp_code = lcp.code();
-
-                                match lcp_code {
-                                    CONFIGURE_REQUEST => {
-                                        let opts: Vec<ConfigOption> =
-                                            ConfigOptionIterator::new(lcp.payload()).collect();
-
-                                        println!(
-                                            "received configuration request, options: {:?}",
-                                            opts
-                                        );
-
-                                        let limit = lcp.payload().len();
-
-                                        let mut ack = Vec::new();
-                                        ack.resize(14 + 6 + 2 + 4 + limit, 0);
-
-                                        let ack = ack.as_mut_slice();
-                                        ack[26..26 + limit].copy_from_slice(lcp.payload());
-
-                                        pppoe::lcp::HeaderBuilder::create_configure_ack(
-                                            &mut ack[22..26 + limit],
-                                            lcp.identifier(),
-                                        )?;
-
-                                        self.new_lcp_packet(remote_mac, ack)?;
-                                        self.send(ack)?;
-
-                                        println!("ackknowledged configuration");
-                                        Ok(())
-                                    }
-                                    _ => Err(Error::InvalidLcpCode(lcp_code)),
-                                }
-                            }
-                            _ => Err(Error::InvalidProtocol(protocol)),
-                        }
+                        self.handle_ppp(remote_mac, header)
                     } else {
                         Err(Error::UnexpectedPpp(remote_mac_str.clone()))
                     }
