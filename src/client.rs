@@ -4,8 +4,9 @@ use std::num::NonZeroU16;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
-use pppoe::lcp::{ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
+use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, CONFIGURE_REQUEST};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
 use pppoe::Header;
@@ -81,7 +82,7 @@ impl Client {
     fn new_discovery_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
-        let mut ethernet_header = pppoe::eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
+        let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
         ethernet_header.set_src_address(local_mac);
         ethernet_header.set_dst_address(dst_mac);
@@ -93,7 +94,7 @@ impl Client {
     fn new_session_packet(&self, dst_mac: [u8; 6], buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.lock().unwrap().socket.mac_address();
 
-        let mut ethernet_header = pppoe::eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
+        let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
         ethernet_header.set_src_address(local_mac);
         ethernet_header.set_dst_address(dst_mac);
@@ -167,7 +168,7 @@ impl Client {
     }
 
     fn handle_lcp(&self, src_mac: [u8; 6], header: ppp::Header) -> Result<()> {
-        let lcp = pppoe::lcp::Header::with_buffer(header.payload())?;
+        let lcp = lcp::Header::with_buffer(header.payload())?;
         let lcp_code = lcp.code();
 
         match lcp_code {
@@ -184,7 +185,7 @@ impl Client {
                 let ack = ack.as_mut_slice();
                 ack[26..26 + limit].copy_from_slice(lcp.payload());
 
-                pppoe::lcp::HeaderBuilder::create_configure_ack(
+                lcp::HeaderBuilder::create_configure_ack(
                     &mut ack[22..26 + limit],
                     lcp.identifier(),
                 )?;
