@@ -168,7 +168,7 @@ impl Client {
                                     let limit = lcp.payload().len();
 
                                     let mut ack = Vec::new();
-                                    ack.resize(14 + 6 + 2 + 4 + 2 * limit, 0);
+                                    ack.resize(14 + 6 + 2 + 4 + limit, 0);
 
                                     let ack = ack.as_mut_slice();
                                     ack[26..26 + limit].copy_from_slice(lcp.payload());
