@@ -194,6 +194,28 @@ impl Client {
     }
 
     fn recv<'a>(&'a self, buf: &'a mut [u8; 1024]) -> Result<Packet> {
+        loop {
+            let pkt = self.recv_pkt(buf)?;
+            let eth = pkt.ethernet_header();
+            let header = pkt.pppoe_header();
+
+            // from correct peer MAC?
+            if self.peer() != BROADCAST && eth.src_address() != self.peer() {
+                continue;
+            }
+
+            // correct session id?
+            if header.code() != PADS
+                && header.session_id() != self.session_id().map(|id| id.into()).unwrap_or(0)
+            {
+                continue;
+            }
+
+            return Ok(pkt);
+        }
+    }
+
+    fn recv_pkt<'a>(&'a self, buf: &'a mut [u8; 1024]) -> Result<Packet> {
         let n = self.inner.lock().unwrap().socket.recv(buf)?;
         let buf = &buf[..n];
 
