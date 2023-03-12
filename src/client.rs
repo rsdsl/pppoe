@@ -5,11 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use byteorder::{ByteOrder, NetworkEndian as NE};
+
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{
     self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_NAK, CONFIGURE_REJECT,
-    CONFIGURE_REQUEST,
+    CONFIGURE_REQUEST, ECHO_REQUEST,
 };
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
@@ -43,15 +45,14 @@ pub struct Client {
 
 impl Client {
     pub fn new(interface: &str) -> Result<Self> {
-        let host_uniq = rand::random();
-
         Ok(Self {
             inner: Arc::new(Mutex::new(ClientRef {
                 socket: Socket::on_interface(interface)?,
                 started: false,
-                host_uniq,
+                host_uniq: rand::random(),
                 state: State::default(),
                 peer: BROADCAST,
+                magic_number: rand::random(),
             })),
         })
     }
@@ -94,6 +95,10 @@ impl Client {
 
     fn set_peer(&self, peer: [u8; 6]) {
         self.inner.lock().unwrap().peer = peer;
+    }
+
+    fn magic_number(&self) -> u32 {
+        self.inner.lock().unwrap().magic_number
     }
 
     fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
@@ -182,7 +187,7 @@ impl Client {
         let mut opts = ConfigOptions::default();
 
         opts.add_option(ConfigOption::Mru(1452));
-        opts.add_option(ConfigOption::MagicNumber(rand::random()));
+        opts.add_option(ConfigOption::MagicNumber(self.magic_number()));
 
         let limit = opts.len();
 
@@ -260,6 +265,23 @@ impl Client {
                 );
 
                 self.terminate(Err(Error::ConfigReject));
+                Ok(())
+            }
+            ECHO_REQUEST => {
+                let limit = lcp.payload().len();
+
+                let mut reply = [0; 14 + 6 + 2 + 4 + 4];
+                NE::write_u32(&mut reply[26..30], self.magic_number());
+
+                lcp::HeaderBuilder::create_echo_reply(
+                    &mut reply[22..26 + limit],
+                    lcp.identifier(),
+                )?;
+
+                self.new_lcp_packet(&mut reply)?;
+                self.send(&reply)?;
+
+                println!("replied to ping");
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),
@@ -378,4 +400,5 @@ struct ClientRef {
     host_uniq: [u8; 16],
     state: State,
     peer: [u8; 6],
+    magic_number: u32,
 }
