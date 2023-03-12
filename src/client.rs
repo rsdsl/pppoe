@@ -242,7 +242,7 @@ impl Client {
                 self.new_lcp_packet(ack)?;
                 self.send(ack)?;
 
-                println!("acknowledged configuration");
+                println!("acknowledged configuration request, options: {:?}", opts);
                 Ok(())
             }
             CONFIGURE_ACK => {
