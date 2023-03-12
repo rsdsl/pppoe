@@ -53,7 +53,7 @@ impl Client {
                 state: State::default(),
                 peer: BROADCAST,
                 magic_number: rand::random(),
-                error: Ok(()),
+                error: String::new(),
             })),
         })
     }
@@ -72,11 +72,50 @@ impl Client {
     }
 
     fn terminate(&self, why: Result<()>) {
-        todo!();
+        let why_fmt = format!("{:?}", why);
+
+        let reason = if let Err(e) = why {
+            format!("{:?}", e)
+        } else {
+            String::new()
+        };
+
+        let limit = reason.len();
+
+        let mut request = Vec::new();
+        request.resize(14 + 6 + 2 + 4 + limit, 0);
+
+        let request = request.as_mut_slice();
+        request[26..26 + limit].copy_from_slice(reason.as_bytes());
+
+        if lcp::HeaderBuilder::create_terminate_request(&mut request[22..26 + limit]).is_ok()
+            && self.new_lcp_packet(request).is_ok()
+        {
+            self.send(request).ok();
+        }
+
+        let mut padt = Vec::new();
+        padt.resize(14 + 6 + 4 + reason.len(), 0);
+
+        if let Ok(session_id) = self.session_id() {
+            let padt = padt.as_mut_slice();
+            if let Ok(mut padt_header) = HeaderBuilder::create_padt(&mut padt[14..], session_id) {
+                padt_header
+                    .add_tag(Tag::GenericError(reason.as_bytes()))
+                    .ok();
+
+                if self.new_discovery_packet(padt).is_ok() {
+                    self.send(padt).ok();
+                }
+            }
+        }
+
+        self.inner.lock().unwrap().error = why_fmt;
+        self.set_state(State::Terminated);
     }
 
     fn why_terminated(&self) -> String {
-        format!("{:?}", self.inner.lock().unwrap().error)
+        self.inner.lock().unwrap().error.clone()
     }
 
     fn state(&self) -> State {
@@ -426,7 +465,13 @@ impl Client {
             if self.state() == State::Terminated {
                 self.inner.lock().unwrap().socket.close();
 
-                println!("session closed: {}", self.why_terminated());
+                let why = self.why_terminated();
+                if why.is_empty() {
+                    println!("session closed");
+                } else {
+                    println!("session closed: {}", why);
+                }
+
                 return Ok(());
             }
         }
@@ -441,5 +486,5 @@ struct ClientRef {
     state: State,
     peer: [u8; 6],
     magic_number: u32,
-    error: Result<()>,
+    error: String,
 }
