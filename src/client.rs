@@ -11,7 +11,7 @@ use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{
     self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_ACK, CONFIGURE_NAK,
-    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST, TERMINATE_REQUEST,
+    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST, TERMINATE_ACK, TERMINATE_REQUEST,
 };
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
@@ -299,7 +299,7 @@ impl Client {
                     return Err(Error::AckedWrongOptions);
                 }
 
-                println!("configuration acknowledged by server, options: {:?}", opts);
+                println!("configuration acknowledged by peer, options: {:?}", opts);
                 Ok(())
             }
             CONFIGURE_NAK => {
@@ -354,6 +354,17 @@ impl Client {
                 self.set_state(State::Terminated);
 
                 println!("acknowledged termination request, reason: {}", reason);
+                Ok(())
+            }
+            TERMINATE_ACK => {
+                // Peer is in a state that requires re-negotiation / re-connection
+                // but it hasn't informed us properly.
+                // This code should never run if the termination was requested by us.
+
+                self.inner.lock().unwrap().error = format!("{:?}", Error::UnexpectedTermAck);
+                self.set_state(State::Terminated);
+
+                println!("peer acknowledged unrequested link termination");
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),

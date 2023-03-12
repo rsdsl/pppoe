@@ -33,6 +33,8 @@ pub enum Error {
     ConfigNak,
     #[error("configuration rejected")]
     ConfigReject,
+    #[error("unexpected acknowledgement of link termination")]
+    UnexpectedTermAck,
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("failed to convert string from UTF-8")]
