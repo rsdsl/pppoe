@@ -26,7 +26,9 @@ pub enum Error {
     InvalidProtocol(u16),
     #[error("invalid LCP code {0}")]
     InvalidLcpCode(u8),
-    #[error("configuration not ackknowledged")]
+    #[error("configuration acknowledged, but options differ from request")]
+    AckedWrongOptions,
+    #[error("configuration not acknowledged")]
     ConfigNak,
     #[error("configuration rejected")]
     ConfigReject,

@@ -10,8 +10,8 @@ use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{
-    self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_NAK, CONFIGURE_REJECT,
-    CONFIGURE_REQUEST, ECHO_REQUEST,
+    self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_ACK, CONFIGURE_NAK,
+    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST,
 };
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
@@ -242,14 +242,27 @@ impl Client {
                 self.new_lcp_packet(ack)?;
                 self.send(ack)?;
 
-                println!("ackknowledged configuration");
+                println!("acknowledged configuration");
+                Ok(())
+            }
+            CONFIGURE_ACK => {
+                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+
+                if opts.len() != 2
+                    || opts[0] != ConfigOption::Mru(1452)
+                    || opts[1] != ConfigOption::MagicNumber(self.magic_number())
+                {
+                    return Err(Error::AckedWrongOptions);
+                }
+
+                println!("configuration acknowledged by server, options: {:?}", opts);
                 Ok(())
             }
             CONFIGURE_NAK => {
                 let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
-                    "the following configuration options were not ackknowledged: {:?}",
+                    "the following configuration options were not acknowledged: {:?}",
                     opts
                 );
 
