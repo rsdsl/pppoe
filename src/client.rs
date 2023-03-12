@@ -11,7 +11,7 @@ use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{
     self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_ACK, CONFIGURE_NAK,
-    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST,
+    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST, TERMINATE_REQUEST,
 };
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
@@ -295,6 +295,21 @@ impl Client {
                 self.send(&reply)?;
 
                 println!("replied to ping");
+                Ok(())
+            }
+            TERMINATE_REQUEST => {
+                let reason = String::from_utf8(lcp.payload().to_vec())?;
+
+                let mut ack = [0; 14 + 6 + 2 + 4];
+
+                lcp::HeaderBuilder::create_terminate_ack(&mut ack[22..26], lcp.identifier())?;
+
+                self.new_lcp_packet(&mut ack)?;
+                self.send(&ack)?;
+
+                self.set_state(State::Terminated);
+
+                println!("acknowledged termination request, reason: {}", reason);
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),

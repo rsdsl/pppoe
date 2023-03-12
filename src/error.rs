@@ -1,4 +1,5 @@
 use std::io;
+use std::string;
 
 use thiserror::Error;
 
@@ -34,6 +35,8 @@ pub enum Error {
     ConfigReject,
     #[error("io error")]
     Io(#[from] io::Error),
+    #[error("failed to convert string from UTF-8")]
+    Utf8(#[from] string::FromUtf8Error),
     #[error("pppoe error: {0:?}")]
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]
