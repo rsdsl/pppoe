@@ -194,8 +194,13 @@ impl Client {
     }
 
     fn recv<'a>(&'a self, buf: &'a mut [u8; 1024]) -> Result<Packet> {
+        let mut n;
+
         loop {
-            let pkt = self.recv_pkt(buf)?;
+            n = self.recv_pkt(buf)?;
+            let buf = &buf[..n];
+
+            let pkt = Packet::with_buffer(buf)?;
             let eth = pkt.ethernet_header();
             let header = pkt.pppoe_header();
 
@@ -211,15 +216,15 @@ impl Client {
                 continue;
             }
 
-            return Ok(pkt);
+            break;
         }
+
+        Ok(Packet::with_buffer(&buf[..n])?)
     }
 
-    fn recv_pkt<'a>(&'a self, buf: &'a mut [u8; 1024]) -> Result<Packet> {
+    fn recv_pkt(&self, buf: &mut [u8; 1024]) -> Result<usize> {
         let n = self.inner.lock().unwrap().socket.recv(buf)?;
-        let buf = &buf[..n];
-
-        Ok(Packet::with_buffer(buf)?)
+        Ok(n)
     }
 
     fn discover(&self) -> Result<()> {
