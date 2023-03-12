@@ -7,7 +7,10 @@ use std::time::Duration;
 
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
-use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_REQUEST};
+use pppoe::lcp::{
+    self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_NAK, CONFIGURE_REJECT,
+    CONFIGURE_REQUEST,
+};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, LCP};
 use pppoe::Header;
@@ -64,6 +67,10 @@ impl Client {
         } else {
             Err(Error::AlreadyActive)
         }
+    }
+
+    fn terminate(&self, why: Result<()>) {
+        todo!();
     }
 
     fn state(&self) -> State {
@@ -231,6 +238,28 @@ impl Client {
                 self.send(ack)?;
 
                 println!("ackknowledged configuration");
+                Ok(())
+            }
+            CONFIGURE_NAK => {
+                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+
+                println!(
+                    "the following configuration options were not ackknowledged: {:?}",
+                    opts
+                );
+
+                self.terminate(Err(Error::ConfigNak));
+                Ok(())
+            }
+            CONFIGURE_REJECT => {
+                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+
+                println!(
+                    "the following configuration options were rejected: {:?}",
+                    opts
+                );
+
+                self.terminate(Err(Error::ConfigReject));
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),

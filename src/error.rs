@@ -26,6 +26,10 @@ pub enum Error {
     InvalidProtocol(u16),
     #[error("invalid LCP code {0}")]
     InvalidLcpCode(u8),
+    #[error("configuration not ackknowledged")]
+    ConfigNak,
+    #[error("configuration rejected")]
+    ConfigReject,
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("pppoe error: {0:?}")]
