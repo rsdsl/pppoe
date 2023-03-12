@@ -53,6 +53,7 @@ impl Client {
                 state: State::default(),
                 peer: BROADCAST,
                 magic_number: rand::random(),
+                error: Ok(()),
             })),
         })
     }
@@ -72,6 +73,10 @@ impl Client {
 
     fn terminate(&self, why: Result<()>) {
         todo!();
+    }
+
+    fn why_terminated(&self) -> String {
+        format!("{:?}", self.inner.lock().unwrap().error)
     }
 
     fn state(&self) -> State {
@@ -409,13 +414,20 @@ impl Client {
 
                     self.inner.lock().unwrap().socket.close();
 
-                    println!("session terminated by peer, MAC {}", remote_mac_str);
+                    println!("session terminated by peer (PADT), MAC {}", remote_mac_str);
                     return Err(Error::Terminated);
                 }
                 _ => Err(Error::InvalidCode(code)),
             } {
                 Ok(_) => {}
                 Err(e) => println!("error processing packet from MAC {}: {}", remote_mac_str, e),
+            }
+
+            if self.state() == State::Terminated {
+                self.inner.lock().unwrap().socket.close();
+
+                println!("session closed: {}", self.why_terminated());
+                return Ok(());
             }
         }
     }
@@ -429,4 +441,5 @@ struct ClientRef {
     state: State,
     peer: [u8; 6],
     magic_number: u32,
+    error: Result<()>,
 }
