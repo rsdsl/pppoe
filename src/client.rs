@@ -10,10 +10,7 @@ use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::chap;
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
-use pppoe::lcp::{
-    self, ConfigOption, ConfigOptionIterator, ConfigOptions, CONFIGURE_ACK, CONFIGURE_NAK,
-    CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST, TERMINATE_ACK, TERMINATE_REQUEST,
-};
+use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, ConfigOptions};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, CHAP, LCP};
 use pppoe::Header;
@@ -298,7 +295,7 @@ impl Client {
         let lcp_code = lcp.code();
 
         match lcp_code {
-            CONFIGURE_REQUEST => {
+            lcp::CONFIGURE_REQUEST => {
                 let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!("received configuration request, options: {:?}", opts);
@@ -322,7 +319,7 @@ impl Client {
                 println!("acknowledged configuration request, options: {:?}", opts);
                 Ok(())
             }
-            CONFIGURE_ACK => {
+            lcp::CONFIGURE_ACK => {
                 let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
 
                 if opts.len() != 2
@@ -335,7 +332,7 @@ impl Client {
                 println!("configuration acknowledged by peer, options: {:?}", opts);
                 Ok(())
             }
-            CONFIGURE_NAK => {
+            lcp::CONFIGURE_NAK => {
                 let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
@@ -346,7 +343,7 @@ impl Client {
                 self.terminate(Err(Error::ConfigNak));
                 Ok(())
             }
-            CONFIGURE_REJECT => {
+            lcp::CONFIGURE_REJECT => {
                 let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
@@ -357,7 +354,7 @@ impl Client {
                 self.terminate(Err(Error::ConfigReject));
                 Ok(())
             }
-            ECHO_REQUEST => {
+            lcp::ECHO_REQUEST => {
                 let limit = lcp.payload().len();
 
                 let mut reply = [0; 14 + 6 + 2 + 4 + 4];
@@ -374,7 +371,7 @@ impl Client {
                 println!("replied to ping");
                 Ok(())
             }
-            TERMINATE_REQUEST => {
+            lcp::TERMINATE_REQUEST => {
                 let reason = String::from_utf8(lcp.payload().to_vec())?;
 
                 let mut ack = [0; 14 + 6 + 2 + 4];
@@ -389,7 +386,7 @@ impl Client {
                 println!("acknowledged termination request, reason: {}", reason);
                 Ok(())
             }
-            TERMINATE_ACK => {
+            lcp::TERMINATE_ACK => {
                 // Peer is in a state that requires re-negotiation / re-connection
                 // but it hasn't informed us properly.
                 // This code should never run if the termination was requested by us.
