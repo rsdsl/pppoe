@@ -10,9 +10,10 @@ use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::chap;
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
+use pppoe::ipcp;
 use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, ConfigOptions};
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
-use pppoe::ppp::{self, Protocol, CHAP, LCP};
+use pppoe::ppp::{self, Protocol, CHAP, IPCP, LCP};
 use pppoe::Header;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -186,6 +187,10 @@ impl Client {
         self.new_ppp_packet(Protocol::Chap, buf)
     }
 
+    fn new_ipcp_packet(&self, buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(Protocol::Ipcp, buf)
+    }
+
     fn send(&self, buf: &[u8]) -> Result<()> {
         let n = self.inner.lock().unwrap().socket.send(buf)?;
         if n != buf.len() {
@@ -286,6 +291,7 @@ impl Client {
         match protocol {
             LCP => self.handle_lcp(ppp),
             CHAP => self.handle_chap(ppp),
+            IPCP => self.handle_ipcp(ppp),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
     }
@@ -446,6 +452,43 @@ impl Client {
                 Ok(())
             }
             _ => Err(Error::InvalidChapCode(chap_code)),
+        }
+    }
+
+    fn handle_ipcp(&self, header: ppp::Header) -> Result<()> {
+        let ipcp = ipcp::Header::with_buffer(header.payload())?;
+        let ipcp_code = ipcp.code();
+
+        match ipcp_code {
+            ipcp::CONFIGURE_REQUEST => {
+                let opts: Vec<ipcp::ConfigOption> =
+                    ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
+
+                println!("received IPCP configuration request, options: {:?}", opts);
+
+                let limit = ipcp.payload().len();
+
+                let mut ack = Vec::new();
+                ack.resize(14 + 6 + 2 + 4 + limit, 0);
+
+                let ack = ack.as_mut_slice();
+                ack[26..26 + limit].copy_from_slice(ipcp.payload());
+
+                ipcp::HeaderBuilder::create_configure_ack(
+                    &mut ack[22..26 + limit],
+                    ipcp.identifier(),
+                )?;
+
+                self.new_ipcp_packet(ack)?;
+                self.send(ack)?;
+
+                println!(
+                    "ackknowledged IPCP configuration request, options: {:?}",
+                    opts
+                );
+                Ok(())
+            }
+            _ => Err(Error::InvalidIpcpCode(ipcp_code)),
         }
     }
 
