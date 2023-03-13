@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 
+use pppoe::chap;
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::lcp::{
@@ -14,7 +15,7 @@ use pppoe::lcp::{
     CONFIGURE_REJECT, CONFIGURE_REQUEST, ECHO_REQUEST, TERMINATE_ACK, TERMINATE_REQUEST,
 };
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
-use pppoe::ppp::{self, Protocol, LCP};
+use pppoe::ppp::{self, Protocol, CHAP, LCP};
 use pppoe::Header;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -184,6 +185,10 @@ impl Client {
         self.new_ppp_packet(Protocol::Lcp, buf)
     }
 
+    fn new_chap_packet(&self, buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(Protocol::Chap, buf)
+    }
+
     fn send(&self, buf: &[u8]) -> Result<()> {
         let n = self.inner.lock().unwrap().socket.send(buf)?;
         if n != buf.len() {
@@ -283,6 +288,7 @@ impl Client {
 
         match protocol {
             LCP => self.handle_lcp(ppp),
+            CHAP => self.handle_chap(ppp),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
     }
@@ -395,6 +401,46 @@ impl Client {
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),
+        }
+    }
+
+    fn handle_chap(&self, header: ppp::Header) -> Result<()> {
+        let chap = chap::Header::with_buffer(header.payload())?;
+        let chap_code = chap.code();
+
+        match chap_code {
+            chap::CHALLENGE => {
+                let username = b"alice";
+                let password = b"1234";
+
+                let limit = 1 + chap.payload()[0];
+                let challenge = &chap.payload()[1..limit as usize];
+
+                let mut chap_input = Vec::new();
+
+                chap_input.push(chap.identifier());
+                chap_input.extend_from_slice(password);
+                chap_input.extend_from_slice(challenge);
+
+                let chap_response = *md5::compute(chap_input);
+
+                let mut response = Vec::new();
+                response.resize(14 + 6 + 2 + 4 + 1 + 16 + username.len(), 0);
+
+                let response = response.as_mut_slice();
+                response[26] = 16; // constant length
+                response[27..27 + 16].copy_from_slice(&chap_response);
+                response[27 + 16..].copy_from_slice(username);
+
+                chap::HeaderBuilder::create_response(&mut response[22..], chap.identifier())?;
+
+                self.new_chap_packet(response)?;
+                self.send(response)?;
+
+                println!("solved CHAP-MD5 challenge");
+                Ok(())
+            }
+            _ => Err(Error::InvalidChapCode(chap_code)),
         }
     }
 

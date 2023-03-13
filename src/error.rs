@@ -35,6 +35,8 @@ pub enum Error {
     ConfigReject,
     #[error("unexpected acknowledgement of link termination")]
     UnexpectedTermAck,
+    #[error("invalid CHAP code {0}")]
+    InvalidChapCode(u8),
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("failed to convert string from UTF-8")]
