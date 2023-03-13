@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 
+use std::net::Ipv4Addr;
 use std::num::NonZeroU16;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -256,10 +257,10 @@ impl Client {
         Ok(())
     }
 
-    fn configure(&self) -> Result<()> {
+    fn configure_link(&self) -> Result<()> {
         match self.state() {
             State::Session(_) => {}
-            _ => return Err(Error::AlreadyActive),
+            _ => return Err(Error::NoSession),
         }
 
         let mut opts = lcp::ConfigOptions::default();
@@ -280,7 +281,38 @@ impl Client {
         self.new_lcp_packet(request)?;
         self.send(request)?;
 
-        println!("requested configuration");
+        println!("requested LCP configuration");
+        Ok(())
+    }
+
+    fn configure_ip(&self) -> Result<()> {
+        match self.state() {
+            State::Session(_) => {}
+            _ => return Err(Error::NoSession),
+        }
+
+        let all_zero = Ipv4Addr::new(0, 0, 0, 0);
+
+        let mut opts = ipcp::ConfigOptions::default();
+
+        opts.add_option(ipcp::ConfigOption::IpAddress(all_zero));
+        opts.add_option(ipcp::ConfigOption::PrimaryDns(all_zero));
+        opts.add_option(ipcp::ConfigOption::SecondaryDns(all_zero));
+
+        let limit = opts.len();
+
+        let mut request = Vec::new();
+        request.resize(14 + 6 + 2 + 4 + limit, 0);
+
+        let request = request.as_mut_slice();
+        opts.write_to_buffer(&mut request[26..26 + limit])?;
+
+        ipcp::HeaderBuilder::create_configure_request(&mut request[22..26 + limit])?;
+
+        self.new_ipcp_packet(request)?;
+        self.send(request)?;
+
+        println!("requested IPCP configuration");
         Ok(())
     }
 
@@ -305,7 +337,7 @@ impl Client {
                 let opts: Vec<lcp::ConfigOption> =
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
-                println!("received configuration request, options: {:?}", opts);
+                println!("received LCP configuration request, options: {:?}", opts);
 
                 let limit = lcp.payload().len();
 
@@ -323,7 +355,10 @@ impl Client {
                 self.new_lcp_packet(ack)?;
                 self.send(ack)?;
 
-                println!("acknowledged configuration request, options: {:?}", opts);
+                println!(
+                    "acknowledged LCP configuration request, options: {:?}",
+                    opts
+                );
                 Ok(())
             }
             lcp::CONFIGURE_ACK => {
@@ -337,7 +372,10 @@ impl Client {
                     return Err(Error::AckedWrongOptions);
                 }
 
-                println!("configuration acknowledged by peer, options: {:?}", opts);
+                println!(
+                    "link configuration acknowledged by peer, options: {:?}",
+                    opts
+                );
                 Ok(())
             }
             lcp::CONFIGURE_NAK => {
@@ -345,7 +383,7 @@ impl Client {
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
-                    "the following configuration options were not acknowledged: {:?}",
+                    "the following LCP configuration options were not acknowledged: {:?}",
                     opts
                 );
 
@@ -357,7 +395,7 @@ impl Client {
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
-                    "the following configuration options were rejected: {:?}",
+                    "the following LCP configuration options were rejected: {:?}",
                     opts
                 );
 
@@ -378,7 +416,7 @@ impl Client {
                 self.new_lcp_packet(&mut reply)?;
                 self.send(&reply)?;
 
-                println!("replied to ping");
+                println!("replied to LCP ping");
                 Ok(())
             }
             lcp::TERMINATE_REQUEST => {
@@ -393,7 +431,7 @@ impl Client {
 
                 self.set_state(State::Terminated);
 
-                println!("acknowledged termination request, reason: {}", reason);
+                println!("acknowledged LCP termination request, reason: {}", reason);
                 Ok(())
             }
             lcp::TERMINATE_ACK => {
@@ -449,6 +487,8 @@ impl Client {
             }
             chap::SUCCESS => {
                 println!("authentication succeeded");
+
+                self.configure_ip()?;
                 Ok(())
             }
             chap::FAILURE => {
@@ -577,7 +617,7 @@ impl Client {
                         println!("session established, ID {}", session_id);
 
                         thread::sleep(Duration::from_secs(1));
-                        self.configure()?;
+                        self.configure_link()?;
 
                         Ok(())
                     } else {
