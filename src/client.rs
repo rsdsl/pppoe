@@ -530,6 +530,48 @@ impl Client {
                     "ackknowledged IPCP configuration request, options: {:?}",
                     opts
                 );
+
+                Ok(())
+            }
+            ipcp::CONFIGURE_ACK => {
+                let opts: Vec<ipcp::ConfigOption> =
+                    ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
+
+                println!("ip configuration acknowledged by peer, options: {:?}", opts);
+                Ok(())
+            }
+            ipcp::CONFIGURE_NAK => {
+                let opts: Vec<ipcp::ConfigOption> =
+                    ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
+
+                println!("obtained configuration via IPCP NAK: {:?}", opts);
+
+                let limit = ipcp.payload().len();
+
+                let mut request = Vec::new();
+                request.resize(14 + 6 + 2 + 4 + limit, 0);
+
+                let request = request.as_mut_slice();
+                request[26..26 + limit].copy_from_slice(ipcp.payload());
+
+                ipcp::HeaderBuilder::create_configure_request(&mut request[22..26 + limit])?;
+
+                self.new_ipcp_packet(request)?;
+                self.send(request)?;
+
+                println!("verifying configuration via IPCP request");
+                Ok(())
+            }
+            ipcp::CONFIGURE_REJECT => {
+                let opts: Vec<ipcp::ConfigOption> =
+                    ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
+
+                println!(
+                    "the following IPCP configuration options were rejected: {:?}",
+                    opts
+                );
+
+                self.terminate(Err(Error::ConfigReject));
                 Ok(())
             }
             _ => Err(Error::InvalidIpcpCode(ipcp_code)),
