@@ -546,7 +546,7 @@ impl Client {
                     self.inner.lock().unwrap().socket.close();
 
                     println!("session terminated by peer (PADT), MAC {}", remote_mac_str);
-                    return Err(Error::Terminated);
+                    return Ok(());
                 }
                 _ => Err(Error::InvalidCode(code)),
             } {

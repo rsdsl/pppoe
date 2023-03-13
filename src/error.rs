@@ -17,8 +17,6 @@ pub enum Error {
     InvalidCode(u8),
     #[error("unexpected PADS")]
     UnexpectedPads,
-    #[error("session terminated by peer")]
-    Terminated,
     #[error("session ID is zero")]
     ZeroSession,
     #[error("unexpected PPP session traffic")]
