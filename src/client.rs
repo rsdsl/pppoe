@@ -11,7 +11,7 @@ use pppoe::chap;
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::ipcp;
-use pppoe::lcp::{self, ConfigOption, ConfigOptionIterator, ConfigOptions};
+use pppoe::lcp;
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
 use pppoe::ppp::{self, Protocol, CHAP, IPCP, LCP};
 use pppoe::Header;
@@ -262,10 +262,10 @@ impl Client {
             _ => return Err(Error::AlreadyActive),
         }
 
-        let mut opts = ConfigOptions::default();
+        let mut opts = lcp::ConfigOptions::default();
 
-        opts.add_option(ConfigOption::Mru(1452));
-        opts.add_option(ConfigOption::MagicNumber(self.magic_number()));
+        opts.add_option(lcp::ConfigOption::Mru(1452));
+        opts.add_option(lcp::ConfigOption::MagicNumber(self.magic_number()));
 
         let limit = opts.len();
 
@@ -302,7 +302,8 @@ impl Client {
 
         match lcp_code {
             lcp::CONFIGURE_REQUEST => {
-                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+                let opts: Vec<lcp::ConfigOption> =
+                    lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!("received configuration request, options: {:?}", opts);
 
@@ -326,11 +327,12 @@ impl Client {
                 Ok(())
             }
             lcp::CONFIGURE_ACK => {
-                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+                let opts: Vec<lcp::ConfigOption> =
+                    lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 if opts.len() != 2
-                    || opts[0] != ConfigOption::Mru(1452)
-                    || opts[1] != ConfigOption::MagicNumber(self.magic_number())
+                    || opts[0] != lcp::ConfigOption::Mru(1452)
+                    || opts[1] != lcp::ConfigOption::MagicNumber(self.magic_number())
                 {
                     return Err(Error::AckedWrongOptions);
                 }
@@ -339,7 +341,8 @@ impl Client {
                 Ok(())
             }
             lcp::CONFIGURE_NAK => {
-                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+                let opts: Vec<lcp::ConfigOption> =
+                    lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
                     "the following configuration options were not acknowledged: {:?}",
@@ -350,7 +353,8 @@ impl Client {
                 Ok(())
             }
             lcp::CONFIGURE_REJECT => {
-                let opts: Vec<ConfigOption> = ConfigOptionIterator::new(lcp.payload()).collect();
+                let opts: Vec<lcp::ConfigOption> =
+                    lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 println!(
                     "the following configuration options were rejected: {:?}",
