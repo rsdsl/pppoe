@@ -23,6 +23,25 @@ use pppoe::Tag;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct IpConfig {
+    pub addr: Ipv4Addr,
+    pub dns1: Ipv4Addr,
+    pub dns2: Ipv4Addr,
+}
+
+impl Default for IpConfig {
+    fn default() -> Self {
+        let all_zero = Ipv4Addr::new(0, 0, 0, 0);
+
+        Self {
+            addr: all_zero,
+            dns1: all_zero,
+            dns2: all_zero,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
     Idle,
@@ -54,6 +73,7 @@ impl Client {
                 peer: BROADCAST,
                 magic_number: rand::random(),
                 error: String::new(),
+                ip_config: IpConfig::default(),
             })),
         })
     }
@@ -143,6 +163,14 @@ impl Client {
 
     fn magic_number(&self) -> u32 {
         self.inner.lock().unwrap().magic_number
+    }
+
+    pub fn ip_config(&self) -> IpConfig {
+        self.inner.lock().unwrap().ip_config.clone()
+    }
+
+    fn set_ip_config(&self, ip_config: IpConfig) {
+        self.inner.lock().unwrap().ip_config = ip_config;
     }
 
     fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
@@ -537,6 +565,39 @@ impl Client {
                 let opts: Vec<ipcp::ConfigOption> =
                     ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
 
+                self.set_ip_config(IpConfig {
+                    addr: *opts
+                        .iter()
+                        .find_map(|opt| {
+                            if let ipcp::ConfigOption::IpAddress(addr) = opt {
+                                Some(addr)
+                            } else {
+                                None
+                            }
+                        })
+                        .ok_or(Error::MissingIpAddr)?,
+                    dns1: *opts
+                        .iter()
+                        .find_map(|opt| {
+                            if let ipcp::ConfigOption::PrimaryDns(addr) = opt {
+                                Some(addr)
+                            } else {
+                                None
+                            }
+                        })
+                        .ok_or(Error::MissingPrimaryDns)?,
+                    dns2: *opts
+                        .iter()
+                        .find_map(|opt| {
+                            if let ipcp::ConfigOption::SecondaryDns(addr) = opt {
+                                Some(addr)
+                            } else {
+                                None
+                            }
+                        })
+                        .ok_or(Error::MissingSecondaryDns)?,
+                });
+
                 println!("ip configuration acknowledged by peer, options: {:?}", opts);
                 Ok(())
             }
@@ -705,4 +766,5 @@ struct ClientRef {
     peer: [u8; 6],
     magic_number: u32,
     error: String,
+    ip_config: IpConfig,
 }

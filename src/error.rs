@@ -37,6 +37,12 @@ pub enum Error {
     InvalidChapCode(u8),
     #[error("invalid IPCP code {0}")]
     InvalidIpcpCode(u8),
+    #[error("peer did not assign us an IP address")]
+    MissingIpAddr,
+    #[error("peer did not send us a primary DNS server")]
+    MissingPrimaryDns,
+    #[error("peer did not send us a secondary DNS server")]
+    MissingSecondaryDns,
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("failed to convert string from UTF-8")]
