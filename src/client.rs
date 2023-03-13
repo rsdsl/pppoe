@@ -440,6 +440,14 @@ impl Client {
                 println!("solved CHAP-MD5 challenge");
                 Ok(())
             }
+            chap::SUCCESS => {
+                println!("authentication succeeded");
+                Ok(())
+            }
+            chap::FAILURE => {
+                println!("authentication failed");
+                Ok(())
+            }
             _ => Err(Error::InvalidChapCode(chap_code)),
         }
     }
