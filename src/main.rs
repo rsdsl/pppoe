@@ -28,7 +28,7 @@ fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
         let ether_type = NE::read_u16(&buf[2..4]);
         if ether_type != IPV4 {
             println!(
-                "dropping outbound non-IPv4 packet, EtherType: {:04x}",
+                "dropping outbound non-IPv4 packet, EtherType: 0x{:04x}",
                 ether_type
             );
             continue;
