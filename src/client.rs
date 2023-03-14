@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use std::net::Ipv4Addr;
 use std::num::NonZeroU16;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -60,15 +60,13 @@ impl Default for State {
 
 #[derive(Clone, Debug)]
 pub struct Client {
-    inner: Arc<Mutex<ClientRef>>,
+    inner: Arc<RwLock<ClientRef>>,
 }
 
 impl Client {
     pub fn new(interface: &str) -> Result<Self> {
-        let (tx, rx) = mpsc::channel();
-
         Ok(Self {
-            inner: Arc::new(Mutex::new(ClientRef {
+            inner: Arc::new(RwLock::new(ClientRef {
                 socket: Socket::on_interface(interface)?,
                 started: false,
                 host_uniq: rand::random(),
@@ -77,16 +75,14 @@ impl Client {
                 magic_number: rand::random(),
                 error: String::new(),
                 ip_config: IpConfig::default(),
-                ip_dgrams_rx: rx,
-                ip_dgrams_tx: tx,
             })),
         })
     }
 
-    pub fn run(self) -> Result<()> {
-        if !self.inner.lock().unwrap().started {
+    pub fn run(self, ip_tx: mpsc::Sender<Vec<u8>>) -> Result<()> {
+        if !self.inner.read().unwrap().started {
             let clt = self.clone();
-            let handle = thread::spawn(move || clt.recv_loop());
+            let handle = thread::spawn(move || clt.recv_loop(ip_tx));
 
             self.discover()?;
 
@@ -135,20 +131,20 @@ impl Client {
             }
         }
 
-        self.inner.lock().unwrap().error = why_fmt;
+        self.inner.write().unwrap().error = why_fmt;
         self.set_state(State::Terminated);
     }
 
     fn why_terminated(&self) -> String {
-        self.inner.lock().unwrap().error.clone()
+        self.inner.read().unwrap().error.clone()
     }
 
     fn state(&self) -> State {
-        self.inner.lock().unwrap().state
+        self.inner.read().unwrap().state
     }
 
     fn set_state(&self, state: State) {
-        self.inner.lock().unwrap().state = state;
+        self.inner.write().unwrap().state = state;
     }
 
     fn session_id(&self) -> Result<NonZeroU16> {
@@ -159,27 +155,27 @@ impl Client {
     }
 
     fn peer(&self) -> [u8; 6] {
-        self.inner.lock().unwrap().peer
+        self.inner.read().unwrap().peer
     }
 
     fn set_peer(&self, peer: [u8; 6]) {
-        self.inner.lock().unwrap().peer = peer;
+        self.inner.write().unwrap().peer = peer;
     }
 
     fn magic_number(&self) -> u32 {
-        self.inner.lock().unwrap().magic_number
+        self.inner.read().unwrap().magic_number
     }
 
     pub fn ip_config(&self) -> IpConfig {
-        self.inner.lock().unwrap().ip_config.clone()
+        self.inner.read().unwrap().ip_config.clone()
     }
 
     fn set_ip_config(&self, ip_config: IpConfig) {
-        self.inner.lock().unwrap().ip_config = ip_config;
+        self.inner.write().unwrap().ip_config = ip_config;
     }
 
     fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
-        let local_mac = self.inner.lock().unwrap().socket.mac_address();
+        let local_mac = self.inner.read().unwrap().socket.mac_address();
 
         let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
@@ -191,7 +187,7 @@ impl Client {
     }
 
     fn new_session_packet(&self, buf: &mut [u8]) -> Result<()> {
-        let local_mac = self.inner.lock().unwrap().socket.mac_address();
+        let local_mac = self.inner.read().unwrap().socket.mac_address();
 
         let mut ethernet_header = eth::HeaderBuilder::with_buffer(&mut buf[..14])?;
 
@@ -247,12 +243,8 @@ impl Client {
         Ok(())
     }
 
-    pub fn recv_ipv4(&self) -> Result<Vec<u8>> {
-        Ok(self.inner.lock().unwrap().ip_dgrams_rx.recv()?)
-    }
-
     fn send(&self, buf: &[u8]) -> Result<()> {
-        let n = self.inner.lock().unwrap().socket.send(buf)?;
+        let n = self.inner.read().unwrap().socket.send(buf)?;
         if n != buf.len() {
             Err(Error::PartialRequest)
         } else {
@@ -290,7 +282,7 @@ impl Client {
     }
 
     fn recv_pkt(&self, buf: &mut [u8; 1024]) -> Result<usize> {
-        let n = self.inner.lock().unwrap().socket.recv(buf)?;
+        let n = self.inner.read().unwrap().socket.recv(buf)?;
         Ok(n)
     }
 
@@ -299,7 +291,7 @@ impl Client {
             return Err(Error::AlreadyActive);
         }
 
-        let host_uniq = self.inner.lock().unwrap().host_uniq;
+        let host_uniq = self.inner.read().unwrap().host_uniq;
 
         let mut discovery = [0; 14 + 6 + 4 + 20];
         let mut discovery_header = HeaderBuilder::create_padi(&mut discovery[14..])?;
@@ -375,7 +367,7 @@ impl Client {
         Ok(())
     }
 
-    fn handle_ppp(&self, header: &Header) -> Result<()> {
+    fn handle_ppp(&self, header: &Header, ip_tx: &mpsc::Sender<Vec<u8>>) -> Result<()> {
         let ppp = ppp::Header::with_buffer(header.payload())?;
         let protocol = ppp.protocol();
 
@@ -383,7 +375,7 @@ impl Client {
             LCP => self.handle_lcp(ppp),
             CHAP => self.handle_chap(ppp),
             IPCP => self.handle_ipcp(ppp),
-            IPV4 => self.handle_ipv4(ppp),
+            IPV4 => self.handle_ipv4(ppp, ip_tx),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
     }
@@ -499,7 +491,7 @@ impl Client {
                 // but it hasn't informed us properly.
                 // This code should never run if the termination was requested by us.
 
-                self.inner.lock().unwrap().error = format!("{:?}", Error::UnexpectedTermAck);
+                self.inner.write().unwrap().error = format!("{:?}", Error::UnexpectedTermAck);
                 self.set_state(State::Terminated);
 
                 println!("peer acknowledged unrequested link termination");
@@ -671,18 +663,14 @@ impl Client {
         }
     }
 
-    fn handle_ipv4(&self, header: ppp::Header) -> Result<()> {
+    fn handle_ipv4(&self, header: ppp::Header, ip_tx: &mpsc::Sender<Vec<u8>>) -> Result<()> {
         let ipv4 = header.payload();
-        self.inner
-            .lock()
-            .unwrap()
-            .ip_dgrams_tx
-            .send(ipv4.to_vec())?;
+        ip_tx.send(ipv4.to_vec())?;
 
         Ok(())
     }
 
-    fn recv_loop(&self) -> Result<()> {
+    fn recv_loop(&self, ip_tx: mpsc::Sender<Vec<u8>>) -> Result<()> {
         loop {
             let mut buf = [0; 1024];
 
@@ -700,7 +688,7 @@ impl Client {
             match match code {
                 PPP => {
                     if let State::Session(_) = self.state() {
-                        self.handle_ppp(header)
+                        self.handle_ppp(header, &ip_tx)
                     } else {
                         Err(Error::UnexpectedPpp)
                     }
@@ -773,7 +761,7 @@ impl Client {
                 PADT => {
                     self.set_state(State::Terminated);
 
-                    self.inner.lock().unwrap().socket.close();
+                    self.inner.write().unwrap().socket.close();
 
                     println!("session terminated by peer (PADT), MAC {}", remote_mac_str);
                     return Ok(());
@@ -785,7 +773,7 @@ impl Client {
             }
 
             if self.state() == State::Terminated {
-                self.inner.lock().unwrap().socket.close();
+                self.inner.write().unwrap().socket.close();
 
                 let why = self.why_terminated();
                 if why.is_empty() {
@@ -810,6 +798,4 @@ struct ClientRef {
     magic_number: u32,
     error: String,
     ip_config: IpConfig,
-    ip_dgrams_rx: mpsc::Receiver<Vec<u8>>,
-    ip_dgrams_tx: mpsc::Sender<Vec<u8>>,
 }

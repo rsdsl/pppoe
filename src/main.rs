@@ -2,6 +2,7 @@ use rsdsl_pppoe::client::Client;
 use rsdsl_pppoe::error::{Error, Result};
 
 use std::env;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
@@ -37,12 +38,12 @@ fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
     }
 }
 
-fn ppp2tun(clt: Client, tun: Arc<Iface>) -> Result<()> {
+fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
     let mut packet_info = [0; 4];
     NE::write_u16(&mut packet_info[2..4], IPV4);
 
     loop {
-        let mut buf = clt.recv_ipv4()?;
+        let mut buf = rx.recv()?;
         buf = prepend(buf, &packet_info);
 
         let n = tun.send(&buf)?;
@@ -55,8 +56,8 @@ fn ppp2tun(clt: Client, tun: Arc<Iface>) -> Result<()> {
 fn main() -> Result<()> {
     let link = env::args().nth(1).ok_or(Error::MissingInterface)?;
 
+    let (tx, rx) = mpsc::channel();
     let tun = Arc::new(Iface::without_packet_info("rsppp0", Mode::Tun)?);
-
     let clt = Client::new(&link)?;
 
     let tun2 = tun.clone();
@@ -66,13 +67,11 @@ fn main() -> Result<()> {
         Err(e) => panic!("tun2ppp error: {}", e),
     });
 
-    let tun3 = tun;
-    let clt3 = clt.clone();
-    thread::spawn(move || match ppp2tun(clt3, tun3) {
+    thread::spawn(move || match ppp2tun(rx, tun) {
         Ok(_) => unreachable!(),
         Err(e) => panic!("ppp2tun error: {}", e),
     });
 
-    clt.run()?;
+    clt.run(tx)?;
     Ok(())
 }
