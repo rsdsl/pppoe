@@ -72,6 +72,7 @@ fn main() -> Result<()> {
         Err(e) => panic!("ppp2tun error: {}", e),
     });
 
-    clt.run(tx)?;
+    #[allow(clippy::redundant_clone)]
+    clt.run(tx.clone())?; // clone so that ppp2tun doesn't panic when ppp link closes
     Ok(())
 }
