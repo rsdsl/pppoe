@@ -11,3 +11,4 @@ md5 = "0.7.0"
 pppoe = { git = "https://github.com/rsdsl/pppoe-rs", version = "0.1.0", features = ["socket"] }
 rand = "0.8.5"
 thiserror = "1.0"
+tun-tap = "0.1.3"
