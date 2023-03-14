@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     let link = env::args().nth(1).ok_or(Error::MissingInterface)?;
 
     let (tx, rx) = mpsc::channel();
-    let tun = Arc::new(Iface::without_packet_info("rsppp0", Mode::Tun)?);
+    let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
     let clt = Client::new(&link)?;
 
     let tun2 = tun.clone();
