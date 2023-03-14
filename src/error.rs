@@ -1,5 +1,6 @@
 use std::io;
 use std::string;
+use std::sync::mpsc;
 
 use thiserror::Error;
 
@@ -47,6 +48,10 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("failed to convert string from UTF-8")]
     Utf8(#[from] string::FromUtf8Error),
+    #[error("mpsc send error")]
+    MpscSend(#[from] mpsc::SendError<Vec<u8>>),
+    #[error("mpsc receive error")]
+    MpscRecv(#[from] mpsc::RecvError),
     #[error("pppoe error: {0:?}")]
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]

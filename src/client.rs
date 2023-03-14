@@ -2,6 +2,7 @@ use crate::error::{Error, Result};
 
 use std::net::Ipv4Addr;
 use std::num::NonZeroU16;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -14,7 +15,7 @@ use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::ipcp;
 use pppoe::lcp;
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
-use pppoe::ppp::{self, Protocol, CHAP, IPCP, LCP};
+use pppoe::ppp::{self, Protocol, CHAP, IPCP, IPV4, LCP};
 use pppoe::Header;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -64,6 +65,8 @@ pub struct Client {
 
 impl Client {
     pub fn new(interface: &str) -> Result<Self> {
+        let (tx, rx) = mpsc::channel();
+
         Ok(Self {
             inner: Arc::new(Mutex::new(ClientRef {
                 socket: Socket::on_interface(interface)?,
@@ -74,6 +77,8 @@ impl Client {
                 magic_number: rand::random(),
                 error: String::new(),
                 ip_config: IpConfig::default(),
+                ip_dgrams_rx: rx,
+                ip_dgrams_tx: tx,
             })),
         })
     }
@@ -220,6 +225,32 @@ impl Client {
         self.new_ppp_packet(Protocol::Ipcp, buf)
     }
 
+    fn new_ipv4_packet(&self, buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(Protocol::Ipv4, buf)
+    }
+
+    pub fn send_ipv4(&self, buf: &[u8]) -> Result<()> {
+        match self.state() {
+            State::Session(_) => {}
+            _ => return Err(Error::NoSession),
+        }
+
+        let mut dgram = Vec::new();
+        dgram.resize(14 + 6 + 2 + buf.len(), 0);
+
+        let dgram = dgram.as_mut_slice();
+        dgram[22..].copy_from_slice(buf);
+
+        self.new_ipv4_packet(dgram)?;
+        self.send(dgram)?;
+
+        Ok(())
+    }
+
+    pub fn recv_ipv4(&self) -> Result<Vec<u8>> {
+        Ok(self.inner.lock().unwrap().ip_dgrams_rx.recv()?)
+    }
+
     fn send(&self, buf: &[u8]) -> Result<()> {
         let n = self.inner.lock().unwrap().socket.send(buf)?;
         if n != buf.len() {
@@ -352,6 +383,7 @@ impl Client {
             LCP => self.handle_lcp(ppp),
             CHAP => self.handle_chap(ppp),
             IPCP => self.handle_ipcp(ppp),
+            IPV4 => self.handle_ipv4(ppp),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
     }
@@ -639,6 +671,17 @@ impl Client {
         }
     }
 
+    fn handle_ipv4(&self, header: ppp::Header) -> Result<()> {
+        let ipv4 = header.payload();
+        self.inner
+            .lock()
+            .unwrap()
+            .ip_dgrams_tx
+            .send(ipv4.to_vec())?;
+
+        Ok(())
+    }
+
     fn recv_loop(&self) -> Result<()> {
         loop {
             let mut buf = [0; 1024];
@@ -767,4 +810,6 @@ struct ClientRef {
     magic_number: u32,
     error: String,
     ip_config: IpConfig,
+    ip_dgrams_rx: mpsc::Receiver<Vec<u8>>,
+    ip_dgrams_tx: mpsc::Sender<Vec<u8>>,
 }
