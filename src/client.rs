@@ -24,11 +24,12 @@ use pppoe::Tag;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IpConfig {
     pub addr: Ipv4Addr,
     pub dns1: Ipv4Addr,
     pub dns2: Ipv4Addr,
+    pub rtr: Ipv4Addr,
 }
 
 impl Default for IpConfig {
@@ -39,6 +40,7 @@ impl Default for IpConfig {
             addr: all_zero,
             dns1: all_zero,
             dns2: all_zero,
+            rtr: all_zero,
         }
     }
 }
@@ -167,7 +169,7 @@ impl Client {
     }
 
     pub fn ip_config(&self) -> IpConfig {
-        self.inner.read().unwrap().ip_config.clone()
+        self.inner.read().unwrap().ip_config
     }
 
     fn set_ip_config(&self, ip_config: IpConfig) {
@@ -562,6 +564,21 @@ impl Client {
 
                 println!("received IPCP configuration request, options: {:?}", opts);
 
+                let mut ip_config = self.ip_config();
+
+                ip_config.rtr = *opts
+                    .iter()
+                    .find_map(|opt| {
+                        if let ipcp::ConfigOption::IpAddress(addr) = opt {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::MissingIpAddr)?;
+
+                self.set_ip_config(ip_config);
+
                 let limit = ipcp.payload().len();
 
                 let mut ack = Vec::new();
@@ -589,40 +606,48 @@ impl Client {
                 let opts: Vec<ipcp::ConfigOption> =
                     ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
 
-                self.set_ip_config(IpConfig {
-                    addr: *opts
-                        .iter()
-                        .find_map(|opt| {
-                            if let ipcp::ConfigOption::IpAddress(addr) = opt {
-                                Some(addr)
-                            } else {
-                                None
-                            }
-                        })
-                        .ok_or(Error::MissingIpAddr)?,
-                    dns1: *opts
-                        .iter()
-                        .find_map(|opt| {
-                            if let ipcp::ConfigOption::PrimaryDns(addr) = opt {
-                                Some(addr)
-                            } else {
-                                None
-                            }
-                        })
-                        .ok_or(Error::MissingPrimaryDns)?,
-                    dns2: *opts
-                        .iter()
-                        .find_map(|opt| {
-                            if let ipcp::ConfigOption::SecondaryDns(addr) = opt {
-                                Some(addr)
-                            } else {
-                                None
-                            }
-                        })
-                        .ok_or(Error::MissingSecondaryDns)?,
-                });
+                let mut ip_config = self.ip_config();
+
+                ip_config.addr = *opts
+                    .iter()
+                    .find_map(|opt| {
+                        if let ipcp::ConfigOption::IpAddress(addr) = opt {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::MissingIpAddr)?;
+
+                ip_config.dns1 = *opts
+                    .iter()
+                    .find_map(|opt| {
+                        if let ipcp::ConfigOption::PrimaryDns(addr) = opt {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::MissingPrimaryDns)?;
+
+                ip_config.dns2 = *opts
+                    .iter()
+                    .find_map(|opt| {
+                        if let ipcp::ConfigOption::SecondaryDns(addr) = opt {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::MissingSecondaryDns)?;
+
+                self.set_ip_config(ip_config);
 
                 println!("ip configuration acknowledged by peer, options: {:?}", opts);
+                println!(
+                    "ip session opened, addr={}, rtr={}, dns1={}, dns2={}",
+                    ip_config.addr, ip_config.rtr, ip_config.dns1, ip_config.dns2
+                );
                 Ok(())
             }
             ipcp::CONFIGURE_NAK => {
