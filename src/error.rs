@@ -13,7 +13,7 @@ pub enum Error {
     #[error("no active PPPoE session")]
     NoSession,
     #[error("bytes transmitted is not equal to request size")]
-    PartialRequest,
+    PartialTransmission,
     #[error("invalid packet code {0}")]
     InvalidCode(u8),
     #[error("unexpected PADS")]

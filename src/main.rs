@@ -48,7 +48,7 @@ fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
 
         let n = tun.send(&buf)?;
         if n != buf.len() {
-            return Err(Error::PartialRequest);
+            return Err(Error::PartialTransmission);
         }
     }
 }

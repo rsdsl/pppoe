@@ -248,7 +248,7 @@ impl Client {
     fn send(&self, buf: &[u8]) -> Result<()> {
         let n = self.inner.read().unwrap().socket.send(buf)?;
         if n != buf.len() {
-            Err(Error::PartialRequest)
+            Err(Error::PartialTransmission)
         } else {
             Ok(())
         }
