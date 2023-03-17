@@ -1,3 +1,5 @@
+use crate::client::IpConfig;
+
 use std::io;
 use std::string;
 use std::sync::mpsc;
@@ -49,13 +51,17 @@ pub enum Error {
     #[error("failed to convert string from UTF-8")]
     Utf8(#[from] string::FromUtf8Error),
     #[error("mpsc send error")]
-    MpscSend(#[from] mpsc::SendError<Vec<u8>>),
+    MpscSendBytes(#[from] mpsc::SendError<Vec<u8>>),
+    #[error("mpsc send error")]
+    MpscSendIpConfig(#[from] mpsc::SendError<IpConfig>),
     #[error("mpsc receive error")]
     MpscRecv(#[from] mpsc::RecvError),
     #[error("pppoe error: {0:?}")]
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]
     PppoeParse(pppoe::error::ParseError),
+    #[error("serde json error")]
+    SerdeJson(#[from] serde_json::Error),
 }
 
 impl From<pppoe::error::Error> for Error {

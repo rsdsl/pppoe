@@ -21,10 +21,11 @@ use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
 use pppoe::Tag;
+use serde::{Deserialize, Serialize};
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IpConfig {
     pub addr: Ipv4Addr,
     pub dns1: Ipv4Addr,
@@ -81,10 +82,14 @@ impl Client {
         })
     }
 
-    pub fn run(self, ip_tx: mpsc::Sender<Vec<u8>>) -> Result<()> {
+    pub fn run(
+        self,
+        ip_tx: mpsc::Sender<Vec<u8>>,
+        ipchange_tx: mpsc::Sender<IpConfig>,
+    ) -> Result<()> {
         if !self.inner.read().unwrap().started {
             let clt = self.clone();
-            let handle = thread::spawn(move || clt.recv_loop(ip_tx));
+            let handle = thread::spawn(move || clt.recv_loop(ip_tx, ipchange_tx));
 
             self.discover()?;
 
@@ -369,14 +374,19 @@ impl Client {
         Ok(())
     }
 
-    fn handle_ppp(&self, header: &Header, ip_tx: &mpsc::Sender<Vec<u8>>) -> Result<()> {
+    fn handle_ppp(
+        &self,
+        header: &Header,
+        ip_tx: &mpsc::Sender<Vec<u8>>,
+        ipchange_tx: &mpsc::Sender<IpConfig>,
+    ) -> Result<()> {
         let ppp = ppp::Header::with_buffer(header.payload())?;
         let protocol = ppp.protocol();
 
         match protocol {
             LCP => self.handle_lcp(ppp),
             CHAP => self.handle_chap(ppp),
-            IPCP => self.handle_ipcp(ppp),
+            IPCP => self.handle_ipcp(ppp, ipchange_tx),
             IPV4 => self.handle_ipv4(ppp, ip_tx),
             _ => Err(Error::InvalidProtocol(protocol)),
         }
@@ -553,7 +563,7 @@ impl Client {
         }
     }
 
-    fn handle_ipcp(&self, header: ppp::Header) -> Result<()> {
+    fn handle_ipcp(&self, header: ppp::Header, tx: &mpsc::Sender<IpConfig>) -> Result<()> {
         let ipcp = ipcp::Header::with_buffer(header.payload())?;
         let ipcp_code = ipcp.code();
 
@@ -578,6 +588,7 @@ impl Client {
                     .ok_or(Error::MissingIpAddr)?;
 
                 self.set_ip_config(ip_config);
+                tx.send(ip_config)?;
 
                 let limit = ipcp.payload().len();
 
@@ -642,6 +653,7 @@ impl Client {
                     .ok_or(Error::MissingSecondaryDns)?;
 
                 self.set_ip_config(ip_config);
+                tx.send(ip_config)?;
 
                 println!("ip configuration acknowledged by peer, options: {:?}", opts);
                 println!(
@@ -695,7 +707,11 @@ impl Client {
         Ok(())
     }
 
-    fn recv_loop(&self, ip_tx: mpsc::Sender<Vec<u8>>) -> Result<()> {
+    fn recv_loop(
+        &self,
+        ip_tx: mpsc::Sender<Vec<u8>>,
+        ipchange_tx: mpsc::Sender<IpConfig>,
+    ) -> Result<()> {
         loop {
             let mut buf = [0; 1024];
 
@@ -713,7 +729,7 @@ impl Client {
             match match code {
                 PPP => {
                     if let State::Session(_) = self.state() {
-                        self.handle_ppp(header, &ip_tx)
+                        self.handle_ppp(header, &ip_tx, &ipchange_tx)
                     } else {
                         Err(Error::UnexpectedPpp)
                     }

@@ -1,7 +1,8 @@
-use rsdsl_pppoe::client::Client;
+use rsdsl_pppoe::client::{Client, IpConfig};
 use rsdsl_pppoe::error::{Error, Result};
 
 use std::env;
+use std::fs::File;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -53,6 +54,15 @@ fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
     }
 }
 
+fn write_config(rx: mpsc::Receiver<IpConfig>) -> Result<()> {
+    loop {
+        let ip_config = rx.recv()?;
+
+        let mut file = File::create("/data/pppoe.ip_config")?;
+        serde_json::to_writer_pretty(&mut file, &ip_config)?;
+    }
+}
+
 fn main() -> Result<()> {
     let link = env::args().nth(1).ok_or(Error::MissingInterface)?;
 
@@ -72,7 +82,14 @@ fn main() -> Result<()> {
         Err(e) => panic!("ppp2tun error: {}", e),
     });
 
+    let (ipchange_tx, ipchange_rx) = mpsc::channel();
+    thread::spawn(move || match write_config(ipchange_rx) {
+        Ok(_) => unreachable!(),
+        Err(e) => panic!("write_config error: {}", e),
+    });
+
+    // clone tx so that ppp2tun doesn't panic when ppp link closes
     #[allow(clippy::redundant_clone)]
-    clt.run(tx.clone())?; // clone so that ppp2tun doesn't panic when ppp link closes
+    clt.run(tx.clone(), ipchange_tx)?;
     Ok(())
 }
