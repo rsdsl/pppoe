@@ -8,8 +8,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("usage: missing interface argument")]
-    MissingInterface,
     #[error("client has already been started")]
     AlreadyActive,
     #[error("no active PPPoE session")]

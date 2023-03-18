@@ -1,7 +1,6 @@
 use rsdsl_pppoe::client::{Client, IpConfig};
 use rsdsl_pppoe::error::{Error, Result};
 
-use std::env;
 use std::fs::File;
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -64,11 +63,12 @@ fn write_config(rx: mpsc::Receiver<IpConfig>) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let link = env::args().nth(1).ok_or(Error::MissingInterface)?;
+    let mut file = File::open("/data/pppoe.conf")?;
+    let config = serde_json::from_reader(&mut file)?;
 
     let (tx, rx) = mpsc::channel();
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
-    let clt = Client::new(&link)?;
+    let clt = Client::new(config)?;
 
     let tun2 = tun.clone();
     let clt2 = clt.clone();

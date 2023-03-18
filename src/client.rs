@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::error::{Error, Result};
 
 use std::net::Ipv4Addr;
@@ -67,10 +68,13 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(interface: &str) -> Result<Self> {
+    pub fn new(config: Config) -> Result<Self> {
+        let link = config.link.clone();
+
         Ok(Self {
             inner: Arc::new(RwLock::new(ClientRef {
-                socket: Socket::on_interface(interface)?,
+                config,
+                socket: Socket::on_interface(&link)?,
                 started: false,
                 host_uniq: rand::random(),
                 state: State::default(),
@@ -519,8 +523,9 @@ impl Client {
 
         match chap_code {
             chap::CHALLENGE => {
-                let username = b"alice";
-                let password = b"1234";
+                let config = &self.inner.read().unwrap().config;
+                let username = config.username.as_bytes();
+                let password = config.password.as_bytes();
 
                 let limit = 1 + chap.payload()[0];
                 let challenge = &chap.payload()[1..limit as usize];
@@ -831,6 +836,7 @@ impl Client {
 
 #[derive(Debug)]
 struct ClientRef {
+    config: Config,
     socket: Socket,
     started: bool,
     host_uniq: [u8; 16],
