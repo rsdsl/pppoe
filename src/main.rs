@@ -1,4 +1,4 @@
-use rsdsl_pppoe::client::{Client, IpConfig};
+use rsdsl_pppoe::client::Client;
 use rsdsl_pppoe::config::Config;
 use rsdsl_pppoe::error::{Error, Result};
 
@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::packet::IPV4;
+use rsdsl_ip_config::IpConfig;
 use rsdsl_netlinkd::link;
 use tun_tap::{Iface, Mode};
 

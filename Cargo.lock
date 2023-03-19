@@ -901,6 +901,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 
 [[package]]
+name = "rsdsl_ip_config"
+version = "0.1.0"
+source = "git+https://github.com/rsdsl/ip_config.git#65c9856ab95ac62abded1f60ea56833912a1f2aa"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rsdsl_netlinkd"
 version = "0.1.0"
 source = "git+https://github.com/rsdsl/netlinkd.git#0e342ddf332bfc871c72ea315ebf45bc8ad8d177"
@@ -923,6 +931,7 @@ dependencies = [
  "md5",
  "pppoe",
  "rand",
+ "rsdsl_ip_config",
  "rsdsl_netlinkd",
  "serde",
  "serde_json",

@@ -1,9 +1,8 @@
-use crate::client::IpConfig;
-
 use std::io;
 use std::string;
 use std::sync::mpsc;
 
+use rsdsl_ip_config::IpConfig;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

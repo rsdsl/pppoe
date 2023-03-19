@@ -22,30 +22,9 @@ use pppoe::HeaderBuilder;
 use pppoe::Packet;
 use pppoe::Socket;
 use pppoe::Tag;
-use serde::{Deserialize, Serialize};
+use rsdsl_ip_config::IpConfig;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct IpConfig {
-    pub addr: Ipv4Addr,
-    pub dns1: Ipv4Addr,
-    pub dns2: Ipv4Addr,
-    pub rtr: Ipv4Addr,
-}
-
-impl Default for IpConfig {
-    fn default() -> Self {
-        let all_zero = Ipv4Addr::new(0, 0, 0, 0);
-
-        Self {
-            addr: all_zero,
-            dns1: all_zero,
-            dns2: all_zero,
-            rtr: all_zero,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
