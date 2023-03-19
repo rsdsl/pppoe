@@ -58,6 +58,8 @@ pub enum Error {
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]
     PppoeParse(pppoe::error::ParseError),
+    #[error("rsdsl netlink(d) error")]
+    RsdslNetlinkd(#[from] rsdsl_netlinkd::error::Error),
     #[error("serde json error")]
     SerdeJson(#[from] serde_json::Error),
 }

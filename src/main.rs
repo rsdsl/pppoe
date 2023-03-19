@@ -6,9 +6,11 @@ use std::fs::File;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::packet::IPV4;
+use rsdsl_netlinkd::link;
 use tun_tap::{Iface, Mode};
 
 fn prepend<T>(v: Vec<T>, s: &[T]) -> Vec<T>
@@ -68,6 +70,11 @@ fn main() -> Result<()> {
     let config: Config = serde_json::from_reader(&mut file)?;
 
     println!("read config, launching on interface {}", config.link);
+
+    while !link::is_up(config.link.clone())? {
+        println!("waiting for {} to come up", config.link);
+        thread::sleep(Duration::from_secs(8));
+    }
 
     let (tx, rx) = mpsc::channel();
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
