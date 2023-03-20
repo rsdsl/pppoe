@@ -99,8 +99,8 @@ fn main() -> Result<()> {
         Err(e) => panic!("write_config error: {}", e),
     });
 
-    // clone tx so that ppp2tun doesn't panic when ppp link closes
+    // clone so that ppp2tun doesn't panic when ppp link closes
     #[allow(clippy::redundant_clone)]
-    clt.run(tx.clone(), ipchange_tx)?;
+    clt.run(tx.clone(), ipchange_tx.clone())?;
     Ok(())
 }
