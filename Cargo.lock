@@ -903,7 +903,7 @@ checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 [[package]]
 name = "rsdsl_ip_config"
 version = "0.1.0"
-source = "git+https://github.com/rsdsl/ip_config.git#65c9856ab95ac62abded1f60ea56833912a1f2aa"
+source = "git+https://github.com/rsdsl/ip_config.git#e13adb9cc9367ad93f1e947335b0d56108015999"
 dependencies = [
  "serde",
 ]

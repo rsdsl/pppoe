@@ -61,7 +61,7 @@ fn write_config(rx: mpsc::Receiver<IpConfig>) -> Result<()> {
     loop {
         let ip_config = rx.recv()?;
 
-        let mut file = File::create("/data/pppoe.ip_config")?;
+        let mut file = File::create(rsdsl_ip_config::LOCATION)?;
         serde_json::to_writer_pretty(&mut file, &ip_config)?;
     }
 }
