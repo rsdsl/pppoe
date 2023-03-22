@@ -25,6 +25,7 @@ use pppoe::Tag;
 use rsdsl_ip_config::IpConfig;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+const BUFSIZE: usize = 1522;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
@@ -242,7 +243,7 @@ impl Client {
         }
     }
 
-    fn recv<'a>(&'a self, buf: &'a mut [u8; 1024]) -> Result<Packet> {
+    fn recv<'a>(&'a self, buf: &'a mut [u8; BUFSIZE]) -> Result<Packet> {
         let mut n;
 
         loop {
@@ -271,7 +272,7 @@ impl Client {
         Ok(Packet::with_buffer(&buf[..n])?)
     }
 
-    fn recv_pkt(&self, buf: &mut [u8; 1024]) -> Result<usize> {
+    fn recv_pkt(&self, buf: &mut [u8; BUFSIZE]) -> Result<usize> {
         let n = self.inner.read().unwrap().socket.recv(buf)?;
         Ok(n)
     }
@@ -697,7 +698,7 @@ impl Client {
         ipchange_tx: mpsc::Sender<IpConfig>,
     ) -> Result<()> {
         loop {
-            let mut buf = [0; 1024];
+            let mut buf = [0; BUFSIZE];
 
             let pkt = self.recv(&mut buf)?;
             let header = pkt.pppoe_header();
