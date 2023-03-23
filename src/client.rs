@@ -122,7 +122,9 @@ impl Client {
             }
         }
 
-        self.inner.write().unwrap().error = why_fmt;
+        let this = self.clone();
+        thread::spawn(move || this.inner.write().unwrap().error = why_fmt);
+
         self.set_state(State::Terminated);
     }
 
@@ -243,27 +245,42 @@ impl Client {
         }
     }
 
-    fn send_while_state(&self, buf: &[u8], state: State, max: Option<u8>, msg: impl Into<String>) {
+    fn send_while_state(&self, buf: &[u8], state: State, msg: impl Into<String>) {
         let this = self.clone();
         let buf = buf.to_vec();
         let msg = msg.into();
 
         thread::spawn(move || {
-            let mut i = 0;
             while this.state() == state {
-                if let Some(max) = max {
-                    if i >= max {
-                        continue;
-                    }
-                }
-
                 match this.send(&buf) {
                     Ok(_) => println!("(re)transmission: {}", &msg),
                     Err(e) => println!("(re)transmission failed: {}", e),
                 }
 
                 thread::sleep(Duration::from_secs(3));
+            }
+        });
+    }
+
+    fn send_while_state_max(&self, buf: &[u8], state: State, max: u8, msg: impl Into<String>) {
+        let this = self.clone();
+        let buf = buf.to_vec();
+        let msg = msg.into();
+
+        thread::spawn(move || {
+            let mut i = 1;
+            while this.state() == state && i <= max {
+                match this.send(&buf) {
+                    Ok(_) => println!("(re)transmission {}/{}: {}", i, max, &msg),
+                    Err(e) => println!("(re)transmission {}/{} failed: {}", i, max, e),
+                }
+
+                thread::sleep(Duration::from_secs(3));
                 i += 1
+            }
+
+            if i > max {
+                this.terminate(Err(Error::TooManyRetransmissions(msg)));
             }
         });
     }
@@ -318,7 +335,7 @@ impl Client {
         self.set_state(State::Discovery);
 
         self.new_discovery_packet(&mut discovery)?;
-        self.send_while_state(&discovery, State::Discovery, None, "PADI");
+        self.send_while_state(&discovery, State::Discovery, "PADI");
 
         println!("discovering...");
         Ok(())
@@ -784,7 +801,7 @@ impl Client {
                         self.set_state(State::Requesting);
 
                         self.new_discovery_packet(&mut request)?;
-                        self.send_while_state(&request, State::Requesting, Some(10), "PADR");
+                        self.send_while_state_max(&request, State::Requesting, 10, "PADR");
 
                         println!("requesting...");
                     } else {
@@ -811,7 +828,6 @@ impl Client {
                 }
                 PADT => {
                     self.set_state(State::Terminated);
-
                     self.inner.write().unwrap().socket.close();
 
                     println!("session terminated by peer (PADT), MAC {}", remote_mac_str);

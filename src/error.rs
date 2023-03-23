@@ -13,6 +13,8 @@ pub enum Error {
     NoSession,
     #[error("bytes transmitted is not equal to request size")]
     PartialTransmission,
+    #[error("number of retransmissions exceeded: {0}")]
+    TooManyRetransmissions(String),
     #[error("invalid packet code {0}")]
     InvalidCode(u8),
     #[error("unexpected PADS")]
