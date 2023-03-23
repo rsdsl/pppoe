@@ -4,7 +4,7 @@ use rsdsl_pppoe::error::{Error, Result};
 
 use std::fs::File;
 use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -42,7 +42,9 @@ fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
     }
 }
 
-fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
+fn ppp2tun(rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>, tun: Arc<Iface>) -> Result<()> {
+    let rx = rx.lock().unwrap();
+
     let mut packet_info = [0; 4];
     NE::write_u16(&mut packet_info[2..4], IPV4);
 
@@ -80,26 +82,35 @@ fn main() -> Result<()> {
 
     let (tx, rx) = mpsc::channel();
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
-    let clt = Client::new(config)?;
 
-    let tun2 = tun.clone();
-    let clt2 = clt.clone();
-    thread::spawn(move || match tun2ppp(clt2, tun2) {
-        Ok(_) => {}
-        Err(e) => panic!("tun2ppp error: {}", e),
-    });
+    let rx = Arc::new(Mutex::new(rx));
 
-    thread::spawn(move || match ppp2tun(rx, tun) {
-        Ok(_) => {}
-        Err(e) => panic!("ppp2tun error: {}", e),
-    });
+    loop {
+        println!("connecting...");
 
-    let (ipchange_tx, ipchange_rx) = mpsc::channel();
-    thread::spawn(move || match write_config(ipchange_rx) {
-        Ok(_) => {}
-        Err(e) => panic!("write_config error: {}", e),
-    });
+        let clt = Client::new(config.clone())?;
 
-    clt.run(tx, ipchange_tx)?;
-    Ok(())
+        let rx2 = rx.clone();
+        let tun2 = tun.clone();
+        let tun3 = tun.clone();
+        let clt2 = clt.clone();
+        thread::spawn(move || match tun2ppp(clt2, tun2) {
+            Ok(_) => {}
+            Err(e) => panic!("tun2ppp error: {}", e),
+        });
+
+        thread::spawn(move || match ppp2tun(rx2, tun3) {
+            Ok(_) => {}
+            Err(e) => panic!("ppp2tun error: {}", e),
+        });
+
+        let (ipchange_tx, ipchange_rx) = mpsc::channel();
+        thread::spawn(move || match write_config(ipchange_rx) {
+            Ok(_) => {}
+            Err(e) => panic!("write_config error: {}", e),
+        });
+
+        clt.run(tx.clone(), ipchange_tx)?;
+        println!("connection lost");
+    }
 }
