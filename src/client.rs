@@ -243,19 +243,27 @@ impl Client {
         }
     }
 
-    fn send_while_state(&self, buf: &[u8], state: State, msg: impl Into<String>) {
+    fn send_while_state(&self, buf: &[u8], state: State, max: Option<u8>, msg: impl Into<String>) {
         let this = self.clone();
         let buf = buf.to_vec();
         let msg = msg.into();
 
         thread::spawn(move || {
+            let mut i = 0;
             while this.state() == state {
+                if let Some(max) = max {
+                    if i >= max {
+                        continue;
+                    }
+                }
+
                 match this.send(&buf) {
                     Ok(_) => println!("(re)transmission: {}", &msg),
                     Err(e) => println!("(re)transmission failed: {}", e),
                 }
 
                 thread::sleep(Duration::from_secs(3));
+                i += 1
             }
         });
     }
@@ -310,7 +318,7 @@ impl Client {
         self.set_state(State::Discovery);
 
         self.new_discovery_packet(&mut discovery)?;
-        self.send_while_state(&discovery, State::Discovery, "PADI");
+        self.send_while_state(&discovery, State::Discovery, None, "PADI");
 
         println!("discovering...");
         Ok(())
@@ -776,7 +784,7 @@ impl Client {
                         self.set_state(State::Requesting);
 
                         self.new_discovery_packet(&mut request)?;
-                        self.send_while_state(&request, State::Requesting, "PADR");
+                        self.send_while_state(&request, State::Requesting, Some(10), "PADR");
 
                         println!("requesting...");
                     } else {
