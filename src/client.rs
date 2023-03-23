@@ -506,7 +506,6 @@ impl Client {
                 self.new_lcp_packet(&mut reply)?;
                 self.send(&reply)?;
 
-                println!("replied to LCP ping");
                 Ok(())
             }
             lcp::TERMINATE_REQUEST => {
