@@ -243,6 +243,23 @@ impl Client {
         }
     }
 
+    fn send_while_state(&self, buf: &[u8], state: State, msg: impl Into<String>) {
+        let this = self.clone();
+        let buf = buf.to_vec();
+        let msg = msg.into();
+
+        thread::spawn(move || {
+            while this.state() == state {
+                match this.send(&buf) {
+                    Ok(_) => println!("(re)transmission: {}", &msg),
+                    Err(e) => println!("(re)transmission failed: {}", e),
+                }
+
+                thread::sleep(Duration::from_secs(3));
+            }
+        });
+    }
+
     fn recv<'a>(&'a self, buf: &'a mut [u8; BUFSIZE]) -> Result<Packet> {
         let mut n;
 
@@ -290,12 +307,12 @@ impl Client {
         discovery_header.add_tag(Tag::ServiceName(b""))?;
         discovery_header.add_tag(Tag::HostUniq(&host_uniq))?;
 
-        self.new_discovery_packet(&mut discovery)?;
-        self.send(&discovery)?;
-
         self.set_state(State::Discovery);
 
-        println!("sent PADI");
+        self.new_discovery_packet(&mut discovery)?;
+        self.send_while_state(&discovery, State::Discovery, "PADI");
+
+        println!("discovering...");
         Ok(())
     }
 
@@ -756,12 +773,12 @@ impl Client {
                             request_header.add_tag(Tag::AcCookie(ac_cookie))?;
                         }
 
-                        self.new_discovery_packet(&mut request)?;
-                        self.send(&request)?;
-
                         self.set_state(State::Requesting);
 
-                        println!("sent PADR");
+                        self.new_discovery_packet(&mut request)?;
+                        self.send_while_state(&request, State::Requesting, "PADR");
+
+                        println!("requesting...");
                     } else {
                         println!("ignoring offer from MAC {}, AC {}", remote_mac_str, ac_name);
                     }
