@@ -46,8 +46,7 @@ fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
     let mut packet_info = [0; 4];
     NE::write_u16(&mut packet_info[2..4], IPV4);
 
-    loop {
-        let mut buf = rx.recv()?;
+    while let Ok(mut buf) = rx.recv() {
         buf = prepend(buf, &packet_info);
 
         let n = tun.send(&buf)?;
@@ -55,15 +54,17 @@ fn ppp2tun(rx: mpsc::Receiver<Vec<u8>>, tun: Arc<Iface>) -> Result<()> {
             return Err(Error::PartialTransmission);
         }
     }
+
+    Ok(())
 }
 
 fn write_config(rx: mpsc::Receiver<IpConfig>) -> Result<()> {
-    loop {
-        let ip_config = rx.recv()?;
-
+    while let Ok(ip_config) = rx.recv() {
         let mut file = File::create(rsdsl_ip_config::LOCATION)?;
         serde_json::to_writer_pretty(&mut file, &ip_config)?;
     }
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -84,23 +85,21 @@ fn main() -> Result<()> {
     let tun2 = tun.clone();
     let clt2 = clt.clone();
     thread::spawn(move || match tun2ppp(clt2, tun2) {
-        Ok(_) => unreachable!(),
+        Ok(_) => {}
         Err(e) => panic!("tun2ppp error: {}", e),
     });
 
     thread::spawn(move || match ppp2tun(rx, tun) {
-        Ok(_) => unreachable!(),
+        Ok(_) => {}
         Err(e) => panic!("ppp2tun error: {}", e),
     });
 
     let (ipchange_tx, ipchange_rx) = mpsc::channel();
     thread::spawn(move || match write_config(ipchange_rx) {
-        Ok(_) => unreachable!(),
+        Ok(_) => {}
         Err(e) => panic!("write_config error: {}", e),
     });
 
-    // clone so that ppp2tun doesn't panic when ppp link closes
-    #[allow(clippy::redundant_clone)]
-    clt.run(tx.clone(), ipchange_tx.clone())?;
+    clt.run(tx, ipchange_tx)?;
     Ok(())
 }
