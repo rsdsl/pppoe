@@ -25,7 +25,7 @@ use pppoe::Tag;
 use rsdsl_ip_config::IpConfig;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-const BUFSIZE: usize = 1500;
+const BUFSIZE: usize = 1500 + 14;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
