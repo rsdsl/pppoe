@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use std::net::Ipv4Addr;
 use std::num::NonZeroU16;
 use std::sync::mpsc;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -69,6 +69,7 @@ impl Client {
     pub fn run(
         self,
         ip_tx: mpsc::Sender<Vec<u8>>,
+        ip_rx: Arc<Mutex<mpsc::Receiver<Option<Vec<u8>>>>>,
         ipchange_tx: mpsc::Sender<IpConfig>,
     ) -> Result<()> {
         if !self.inner.read().unwrap().started {
@@ -76,6 +77,18 @@ impl Client {
             let handle = thread::spawn(move || clt.recv_loop(ip_tx, ipchange_tx));
 
             self.discover()?;
+
+            thread::spawn(move || {
+                for buf in &*ip_rx.lock().unwrap() {
+                    match buf {
+                        Some(buf) => match self.send_ipv4(&buf) {
+                            Ok(_) => {}
+                            Err(e) => println!("ip transmission failed: {}", e),
+                        },
+                        None => return,
+                    }
+                }
+            });
 
             Ok(handle.join().unwrap()?)
         } else {

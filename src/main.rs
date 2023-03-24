@@ -23,7 +23,7 @@ where
     tmp
 }
 
-fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
+fn tun2ppp(tx: mpsc::Sender<Option<Vec<u8>>>, tun: Arc<Iface>) -> Result<()> {
     loop {
         let mut buf = [0; 4 + 1492];
         let n = tun.recv(&mut buf)?;
@@ -38,7 +38,7 @@ fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
             continue;
         }
 
-        clt.send_ipv4(&buf[4..])?;
+        tx.send(Some(buf[4..].to_vec()))?;
     }
 }
 
@@ -80,26 +80,30 @@ fn main() -> Result<()> {
         thread::sleep(Duration::from_secs(8));
     }
 
-    let (tx, rx) = mpsc::channel();
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
 
-    let rx = Arc::new(Mutex::new(rx));
+    let (recv_tx, recv_rx) = mpsc::channel();
+    let recv_rx = Arc::new(Mutex::new(recv_rx));
+
+    let (send_tx, send_rx) = mpsc::channel();
+    let send_rx = Arc::new(Mutex::new(send_rx));
 
     loop {
         println!("connecting...");
 
         let clt = Client::new(config.clone())?;
 
-        let rx2 = rx.clone();
+        let recv_rx2 = recv_rx.clone();
+        let send_tx2 = send_tx.clone();
         let tun2 = tun.clone();
         let tun3 = tun.clone();
-        let clt2 = clt.clone();
-        thread::spawn(move || match tun2ppp(clt2, tun2) {
+
+        thread::spawn(move || match tun2ppp(send_tx2, tun2) {
             Ok(_) => {}
             Err(e) => panic!("tun2ppp error: {}", e),
         });
 
-        thread::spawn(move || match ppp2tun(rx2, tun3) {
+        thread::spawn(move || match ppp2tun(recv_rx2, tun3) {
             Ok(_) => {}
             Err(e) => panic!("ppp2tun error: {}", e),
         });
@@ -110,7 +114,9 @@ fn main() -> Result<()> {
             Err(e) => panic!("write_config error: {}", e),
         });
 
-        clt.run(tx.clone(), ipchange_tx)?;
+        clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx)?;
+
+        send_tx.send(None)?;
         println!("connection lost");
     }
 }

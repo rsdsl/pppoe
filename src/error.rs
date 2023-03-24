@@ -52,6 +52,8 @@ pub enum Error {
     #[error("mpsc send error")]
     MpscSendBytes(#[from] mpsc::SendError<Vec<u8>>),
     #[error("mpsc send error")]
+    MpscSendBytesOpt(#[from] mpsc::SendError<Option<Vec<u8>>>),
+    #[error("mpsc send error")]
     MpscSendIpConfig(#[from] mpsc::SendError<IpConfig>),
     #[error("mpsc receive error")]
     MpscRecv(#[from] mpsc::RecvError),
