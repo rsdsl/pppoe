@@ -45,6 +45,8 @@ pub enum Error {
     MissingPrimaryDns,
     #[error("peer did not send us a secondary DNS server")]
     MissingSecondaryDns,
+    #[error("no ip connection")]
+    Disconnected,
     #[error("io error")]
     Io(#[from] io::Error),
     #[error("failed to convert string from UTF-8")]
