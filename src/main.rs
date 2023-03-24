@@ -88,33 +88,31 @@ fn main() -> Result<()> {
     let (send_tx, send_rx) = mpsc::channel();
     let send_rx = Arc::new(Mutex::new(send_rx));
 
+    let send_tx2 = send_tx.clone();
+    let tun2 = tun.clone();
+
+    thread::spawn(move || match tun2ppp(send_tx2, tun2) {
+        Ok(_) => {}
+        Err(e) => panic!("tun2ppp error: {}", e),
+    });
+
+    thread::spawn(move || match ppp2tun(recv_rx, tun) {
+        Ok(_) => {}
+        Err(e) => panic!("ppp2tun error: {}", e),
+    });
+
+    let (ipchange_tx, ipchange_rx) = mpsc::channel();
+    thread::spawn(move || match write_config(ipchange_rx) {
+        Ok(_) => {}
+        Err(e) => panic!("write_config error: {}", e),
+    });
+
     loop {
         println!("connecting...");
 
         let clt = Client::new(config.clone())?;
 
-        let recv_rx2 = recv_rx.clone();
-        let send_tx2 = send_tx.clone();
-        let tun2 = tun.clone();
-        let tun3 = tun.clone();
-
-        thread::spawn(move || match tun2ppp(send_tx2, tun2) {
-            Ok(_) => {}
-            Err(e) => panic!("tun2ppp error: {}", e),
-        });
-
-        thread::spawn(move || match ppp2tun(recv_rx2, tun3) {
-            Ok(_) => {}
-            Err(e) => panic!("ppp2tun error: {}", e),
-        });
-
-        let (ipchange_tx, ipchange_rx) = mpsc::channel();
-        thread::spawn(move || match write_config(ipchange_rx) {
-            Ok(_) => {}
-            Err(e) => panic!("write_config error: {}", e),
-        });
-
-        clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx)?;
+        clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx.clone())?;
 
         send_tx.send(None)?;
         println!("connection lost");
