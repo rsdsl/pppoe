@@ -32,7 +32,7 @@ fn tun2ppp(tx: mpsc::Sender<Option<Vec<u8>>>, tun: Arc<Iface>) -> Result<()> {
         let ether_type = NE::read_u16(&buf[2..4]);
         if ether_type != IPV4 {
             println!(
-                "dropping outbound non-IPv4 packet, EtherType: 0x{:04x}",
+                "[pppoe] drop outbound non-ipv4 pkt, ethertype: 0x{:04x}",
                 ether_type
             );
             continue;
@@ -73,10 +73,10 @@ fn main() -> Result<()> {
     let mut file = File::open("/data/pppoe.conf")?;
     let config: Config = serde_json::from_reader(&mut file)?;
 
-    println!("read config, launching on interface {}", config.link);
+    println!("[pppoe] read config, launch on interface {}", config.link);
 
     while !link::is_up(config.link.clone())? {
-        println!("waiting for {} to come up", config.link);
+        println!("[pppoe] wait for {} to come up", config.link);
         thread::sleep(Duration::from_secs(8));
     }
 
@@ -108,13 +108,13 @@ fn main() -> Result<()> {
     });
 
     loop {
-        println!("connecting...");
+        println!("[pppoe] connect");
 
         let clt = Client::new(config.clone())?;
 
         clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx.clone())?;
 
         send_tx.send(None)?;
-        println!("connection lost");
+        println!("[pppoe] disconnect");
     }
 }

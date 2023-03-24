@@ -7,49 +7,49 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("client has already been started")]
+    #[error("client already started")]
     AlreadyActive,
     #[error("no active PPPoE session")]
     NoSession,
-    #[error("bytes transmitted is not equal to request size")]
+    #[error("bytes sent not equal to pkt size")]
     PartialTransmission,
-    #[error("number of retransmissions exceeded: {0}")]
+    #[error("too many retransmissions: {0}")]
     TooManyRetransmissions(String),
-    #[error("invalid packet code {0}")]
+    #[error("invalid pkt code {0}")]
     InvalidCode(u8),
-    #[error("unexpected PADS")]
+    #[error("unexpected pads")]
     UnexpectedPads,
-    #[error("session ID is zero")]
+    #[error("session id can't be zero")]
     ZeroSession,
-    #[error("unexpected PPP session traffic")]
+    #[error("unexpected ppp session traffic")]
     UnexpectedPpp,
-    #[error("invalid PPP sub-protocol {0}")]
+    #[error("invalid ppp sub-protocol {0}")]
     InvalidProtocol(u16),
-    #[error("invalid LCP code {0}")]
+    #[error("invalid lcp code {0}")]
     InvalidLcpCode(u8),
-    #[error("configuration acknowledged, but options differ from request")]
+    #[error("configure-ack, but opts don't match req")]
     AckedWrongOptions,
-    #[error("configuration not acknowledged")]
+    #[error("configure-nak")]
     ConfigNak,
-    #[error("configuration rejected")]
+    #[error("configure-reject")]
     ConfigReject,
-    #[error("unexpected acknowledgement of link termination")]
+    #[error("unexpected lcp terminate-ack")]
     UnexpectedTermAck,
-    #[error("invalid CHAP code {0}")]
+    #[error("invalid chap code {0}")]
     InvalidChapCode(u8),
-    #[error("invalid IPCP code {0}")]
+    #[error("invalid ipcp code {0}")]
     InvalidIpcpCode(u8),
-    #[error("peer did not assign us an IP address")]
+    #[error("no ip addr in ipcp configure-nak")]
     MissingIpAddr,
-    #[error("peer did not send us a primary DNS server")]
+    #[error("no dns1 in ipcp configure-nak")]
     MissingPrimaryDns,
-    #[error("peer did not send us a secondary DNS server")]
+    #[error("no dns2 in ipcp configure-nak")]
     MissingSecondaryDns,
-    #[error("no ip connection")]
+    #[error("ipcp closed")]
     Disconnected,
     #[error("io error")]
     Io(#[from] io::Error),
-    #[error("failed to convert string from UTF-8")]
+    #[error("can't create string from UTF-8")]
     Utf8(#[from] string::FromUtf8Error),
     #[error("mpsc send error")]
     MpscSendBytes(#[from] mpsc::SendError<Vec<u8>>),
@@ -57,15 +57,15 @@ pub enum Error {
     MpscSendBytesOpt(#[from] mpsc::SendError<Option<Vec<u8>>>),
     #[error("mpsc send error")]
     MpscSendIpConfig(#[from] mpsc::SendError<IpConfig>),
-    #[error("mpsc receive error")]
+    #[error("mpsc recv error")]
     MpscRecv(#[from] mpsc::RecvError),
     #[error("pppoe error: {0:?}")]
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]
     PppoeParse(pppoe::error::ParseError),
-    #[error("rsdsl netlink(d) error")]
+    #[error("rsdsl_netlinkd error")]
     RsdslNetlinkd(#[from] rsdsl_netlinkd::error::Error),
-    #[error("serde json error")]
+    #[error("serde_json error")]
     SerdeJson(#[from] serde_json::Error),
 }
 
