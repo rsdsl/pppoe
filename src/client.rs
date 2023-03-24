@@ -62,7 +62,6 @@ impl Client {
                 magic_number: rand::random(),
                 error: String::new(),
                 ip_config: IpConfig::default(),
-                connected: false,
             })),
         })
     }
@@ -82,18 +81,16 @@ impl Client {
             thread::spawn(move || {
                 for buf in &*ip_rx.lock().unwrap() {
                     match buf {
-                        Some(buf) => {
-                            while let Err(e) = self.send_ipv4(&buf) {
-                                match e {
-                                    Error::NoSession => {}
-                                    Error::Disconnected => {}
-                                    _ => {
-                                        println!("ip transmission failed: {}", e);
-                                        break;
-                                    }
+                        Some(buf) => match self.send_ipv4(&buf) {
+                            Ok(_) => {}
+                            Err(e) => match e {
+                                Error::NoSession => {}
+                                Error::Disconnected => {}
+                                _ => {
+                                    println!("ip transmission failed: {}", e);
                                 }
-                            }
-                        }
+                            },
+                        },
                         None => return,
                     }
                 }
@@ -189,14 +186,6 @@ impl Client {
         self.inner.write().unwrap().ip_config = ip_config;
     }
 
-    pub fn is_connected(&self) -> bool {
-        self.inner.read().unwrap().connected
-    }
-
-    fn set_connected(&self, connected: bool) {
-        self.inner.write().unwrap().connected = connected;
-    }
-
     fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.read().unwrap().socket.mac_address();
 
@@ -252,10 +241,6 @@ impl Client {
         match self.state() {
             State::Session(_) => {}
             _ => return Err(Error::NoSession),
-        }
-
-        if !self.is_connected() {
-            return Err(Error::Disconnected);
         }
 
         let mut dgram = Vec::new();
@@ -717,10 +702,6 @@ impl Client {
 
                 println!("ip configuration acknowledged by peer, options: {:?}", opts);
 
-                // Wait, otherwise the peer may discard our data packets.
-                thread::sleep(Duration::from_secs(1));
-                self.set_connected(true);
-
                 println!(
                     "ip session opened, addr={}, rtr={}, dns1={}, dns2={}",
                     ip_config.addr, ip_config.rtr, ip_config.dns1, ip_config.dns2
@@ -878,8 +859,6 @@ impl Client {
             }
 
             if self.state() == State::Terminated {
-                self.set_connected(false);
-
                 self.inner.write().unwrap().socket.close();
 
                 let why = self.why_terminated();
@@ -906,5 +885,4 @@ struct ClientRef {
     magic_number: u32,
     error: String,
     ip_config: IpConfig,
-    connected: bool,
 }
