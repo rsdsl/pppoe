@@ -25,7 +25,7 @@ where
 
 fn tun2ppp(clt: Client, tun: Arc<Iface>) -> Result<()> {
     loop {
-        let mut buf = [0; 1504];
+        let mut buf = [0; 4 + 1492];
         let n = tun.recv(&mut buf)?;
         let buf = &buf[..n];
 

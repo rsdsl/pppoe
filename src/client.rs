@@ -25,7 +25,7 @@ use pppoe::Tag;
 use rsdsl_ip_config::IpConfig;
 
 const BROADCAST: [u8; 6] = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-const BUFSIZE: usize = 1522;
+const BUFSIZE: usize = 1500;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum State {
@@ -349,7 +349,7 @@ impl Client {
 
         let mut opts = lcp::ConfigOptions::default();
 
-        opts.add_option(lcp::ConfigOption::Mru(1452));
+        opts.add_option(lcp::ConfigOption::Mru(1492));
         opts.add_option(lcp::ConfigOption::MagicNumber(self.magic_number()));
 
         let limit = opts.len();
@@ -456,7 +456,7 @@ impl Client {
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
                 if opts.len() != 2
-                    || opts[0] != lcp::ConfigOption::Mru(1452)
+                    || opts[0] != lcp::ConfigOption::Mru(1492)
                     || opts[1] != lcp::ConfigOption::MagicNumber(self.magic_number())
                 {
                     return Err(Error::AckedWrongOptions);
