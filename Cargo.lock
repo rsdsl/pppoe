@@ -911,12 +911,12 @@ dependencies = [
 [[package]]
 name = "rsdsl_netlinkd"
 version = "0.1.0"
-source = "git+https://github.com/rsdsl/netlinkd.git#0e342ddf332bfc871c72ea315ebf45bc8ad8d177"
+source = "git+https://github.com/rsdsl/netlinkd.git#6909a5a6ccc1844c14769d0e6ac7a5b4244ff5de"
 dependencies = [
  "futures-util",
  "netlink-packet-route",
  "notify",
- "rsdsl_pppoe 0.1.0 (git+https://github.com/rsdsl/pppoe.git)",
+ "rsdsl_ip_config",
  "rtnetlink",
  "serde_json",
  "thiserror",
@@ -933,21 +933,6 @@ dependencies = [
  "rand",
  "rsdsl_ip_config",
  "rsdsl_netlinkd",
- "serde",
- "serde_json",
- "thiserror",
- "tun-tap",
-]
-
-[[package]]
-name = "rsdsl_pppoe"
-version = "0.1.0"
-source = "git+https://github.com/rsdsl/pppoe.git#0bbe891ed5af55c025ec828a4a75a89ac8a46be0"
-dependencies = [
- "byteorder",
- "md5",
- "pppoe",
- "rand",
  "serde",
  "serde_json",
  "thiserror",
