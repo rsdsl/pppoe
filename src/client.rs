@@ -499,7 +499,7 @@ impl Client {
                     let nak = nak.as_mut_slice();
                     resp_opts.write_to_buffer(&mut nak[26..26 + limit])?;
 
-                    lcp::HeaderBuilder::create_configure_ack(
+                    lcp::HeaderBuilder::create_configure_nak(
                         &mut nak[22..26 + limit],
                         lcp.identifier(),
                     )?;
