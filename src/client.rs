@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 
+use pppoe::auth;
 use pppoe::chap;
 use pppoe::eth;
 use pppoe::header::{PADO, PADS, PADT, PPP};
@@ -446,25 +447,69 @@ impl Client {
                 let opts: Vec<lcp::ConfigOption> =
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
+                let auth_is_chap = opts
+                    .iter()
+                    .any(|opt| *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5])));
+
                 println!("[pppoe] recv lcp configure-req, opts: {:?}", opts);
 
-                let limit = lcp.payload().len();
+                if auth_is_chap {
+                    let limit = lcp.payload().len();
 
-                let mut ack = Vec::new();
-                ack.resize(14 + 6 + 2 + 4 + limit, 0);
+                    let mut ack = Vec::new();
+                    ack.resize(14 + 6 + 2 + 4 + limit, 0);
 
-                let ack = ack.as_mut_slice();
-                ack[26..26 + limit].copy_from_slice(lcp.payload());
+                    let ack = ack.as_mut_slice();
+                    ack[26..26 + limit].copy_from_slice(lcp.payload());
 
-                lcp::HeaderBuilder::create_configure_ack(
-                    &mut ack[22..26 + limit],
-                    lcp.identifier(),
-                )?;
+                    lcp::HeaderBuilder::create_configure_ack(
+                        &mut ack[22..26 + limit],
+                        lcp.identifier(),
+                    )?;
 
-                self.new_lcp_packet(ack)?;
-                self.send(ack)?;
+                    self.new_lcp_packet(ack)?;
+                    self.send(ack)?;
 
-                println!("[pppoe] ack lcp configure-req, opts: {:?}", opts);
+                    println!("[pppoe] ack lcp configure-req, opts: {:?}", opts);
+                } else {
+                    let mut resp_opts = lcp::ConfigOptions::default();
+
+                    for opt in opts.clone() {
+                        let is_non_chap =
+                            if let lcp::ConfigOption::AuthProtocol(ref auth_proto) = opt {
+                                *auth_proto != auth::Protocol::Chap(&[5])
+                            } else {
+                                false
+                            };
+
+                        if is_non_chap {
+                            let chap_opt =
+                                lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5]));
+                            resp_opts.add_option(chap_opt);
+                        } else {
+                            resp_opts.add_option(opt);
+                        }
+                    }
+
+                    let limit = resp_opts.len();
+
+                    let mut nak = Vec::new();
+                    nak.resize(14 + 6 + 2 + 4 + limit, 0);
+
+                    let nak = nak.as_mut_slice();
+                    resp_opts.write_to_buffer(&mut nak[26..26 + limit])?;
+
+                    lcp::HeaderBuilder::create_configure_ack(
+                        &mut nak[22..26 + limit],
+                        lcp.identifier(),
+                    )?;
+
+                    self.new_lcp_packet(nak)?;
+                    self.send(nak)?;
+
+                    println!("[pppoe] nak lcp configure-req, opts: {:?}", opts);
+                }
+
                 Ok(())
             }
             lcp::CONFIGURE_ACK => {
