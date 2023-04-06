@@ -474,7 +474,7 @@ impl Client {
                 } else {
                     let mut resp_opts = lcp::ConfigOptions::default();
 
-                    for opt in opts.clone() {
+                    for opt in opts {
                         let is_non_chap =
                             if let lcp::ConfigOption::AuthProtocol(ref auth_proto) = opt {
                                 *auth_proto != auth::Protocol::Chap(&[5])
@@ -507,7 +507,7 @@ impl Client {
                     self.new_lcp_packet(nak)?;
                     self.send(nak)?;
 
-                    println!("[pppoe] nak lcp configure-req, opts: {:?}", opts);
+                    println!("[pppoe] nak lcp configure-req, opts: {:?}", resp_opts);
                 }
 
                 Ok(())
