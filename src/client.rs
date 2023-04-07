@@ -17,7 +17,8 @@ use pppoe::header::{PADO, PADS, PADT, PPP};
 use pppoe::ipcp;
 use pppoe::lcp;
 use pppoe::packet::{PPPOE_DISCOVERY, PPPOE_SESSION};
-use pppoe::ppp::{self, Protocol, CHAP, IPCP, IPV4, LCP};
+use pppoe::pap;
+use pppoe::ppp::{self, Protocol, CHAP, IPCP, IPV4, LCP, PAP};
 use pppoe::Header;
 use pppoe::HeaderBuilder;
 use pppoe::Packet;
@@ -63,6 +64,7 @@ impl Client {
                 magic_number: rand::random(),
                 error: String::new(),
                 ip_config: IpConfig::default(),
+                auth_suggestions: 0,
             })),
         })
     }
@@ -187,6 +189,14 @@ impl Client {
         self.inner.write().unwrap().ip_config = ip_config;
     }
 
+    fn auth_suggestions(&self) -> u8 {
+        let mut inner = self.inner.write().unwrap();
+        let m = inner.auth_suggestions;
+        inner.auth_suggestions += 1;
+
+        m
+    }
+
     fn new_discovery_packet(&self, buf: &mut [u8]) -> Result<()> {
         let local_mac = self.inner.read().unwrap().socket.mac_address();
 
@@ -224,6 +234,10 @@ impl Client {
 
     fn new_lcp_packet(&self, buf: &mut [u8]) -> Result<()> {
         self.new_ppp_packet(Protocol::Lcp, buf)
+    }
+
+    fn new_pap_packet(&self, buf: &mut [u8]) -> Result<()> {
+        self.new_ppp_packet(Protocol::Pap, buf)
     }
 
     fn new_chap_packet(&self, buf: &mut [u8]) -> Result<()> {
@@ -389,6 +403,35 @@ impl Client {
         Ok(())
     }
 
+    fn authenticate_pap(&self) -> Result<()> {
+        match self.state() {
+            State::Session(_) => {}
+            _ => return Err(Error::NoSession),
+        }
+
+        let config = &self.inner.read().unwrap().config;
+        let username = config.username.as_bytes();
+        let password = config.password.as_bytes();
+
+        let mut auth_req = Vec::new();
+        auth_req.resize(14 + 6 + 2 + 4 + 1 + username.len() + 1 + password.len(), 0);
+
+        let auth_req = auth_req.as_mut_slice();
+        auth_req[26] = username.len() as u8;
+        auth_req[27..27 + username.len()].copy_from_slice(username);
+        auth_req[27 + username.len()] = password.len() as u8;
+        auth_req[28 + username.len()..28 + username.len() + password.len()]
+            .copy_from_slice(password);
+
+        pap::HeaderBuilder::create_auth_request(&mut auth_req[22..])?;
+
+        self.new_pap_packet(auth_req)?;
+        self.send(auth_req)?;
+
+        println!("[pppoe] send PAP authentication request");
+        Ok(())
+    }
+
     fn configure_ip(&self) -> Result<()> {
         match self.state() {
             State::Session(_) => {}
@@ -431,6 +474,7 @@ impl Client {
 
         match protocol {
             LCP => self.handle_lcp(ppp),
+            PAP => self.handle_pap(ppp),
             CHAP => self.handle_chap(ppp),
             IPCP => self.handle_ipcp(ppp, ipchange_tx),
             IPV4 => self.handle_ipv4(ppp, ip_tx),
@@ -447,13 +491,14 @@ impl Client {
                 let opts: Vec<lcp::ConfigOption> =
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
-                let auth_is_chap = opts
-                    .iter()
-                    .any(|opt| *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5])));
+                let auth_is_supported = opts.iter().any(|opt| {
+                    *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5]))
+                        || *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Pap)
+                });
 
                 println!("[pppoe] recv lcp configure-req, opts: {:?}", opts);
 
-                if auth_is_chap {
+                if auth_is_supported {
                     let limit = lcp.payload().len();
 
                     let mut ack = Vec::new();
@@ -471,21 +516,34 @@ impl Client {
                     self.send(ack)?;
 
                     println!("[pppoe] ack lcp configure-req, opts: {:?}", opts);
+
+                    let auth_is_pap = opts
+                        .iter()
+                        .any(|opt| *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Pap));
+
+                    if auth_is_pap {
+                        self.authenticate_pap()?;
+                    }
                 } else {
                     let mut resp_opts = lcp::ConfigOptions::default();
 
                     for opt in opts {
-                        let is_non_chap =
+                        let is_unsupported =
                             if let lcp::ConfigOption::AuthProtocol(ref auth_proto) = opt {
                                 *auth_proto != auth::Protocol::Chap(&[5])
+                                    && *auth_proto != auth::Protocol::Pap
                             } else {
                                 false
                             };
 
-                        if is_non_chap {
-                            let chap_opt =
-                                lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5]));
-                            resp_opts.add_option(chap_opt);
+                        if is_unsupported {
+                            let auth_opt = if self.auth_suggestions() % 2 == 0 {
+                                lcp::ConfigOption::AuthProtocol(auth::Protocol::Chap(&[5]))
+                            } else {
+                                lcp::ConfigOption::AuthProtocol(auth::Protocol::Pap)
+                            };
+
+                            resp_opts.add_option(auth_opt);
                         } else {
                             resp_opts.add_option(opt);
                         }
@@ -587,6 +645,25 @@ impl Client {
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),
+        }
+    }
+
+    fn handle_pap(&self, header: ppp::Header) -> Result<()> {
+        let pap = pap::Header::with_buffer(header.payload())?;
+        let pap_code = pap.code();
+
+        match pap_code {
+            pap::AUTH_ACK => {
+                println!("[pppoe] auth success");
+
+                self.configure_ip()?;
+                Ok(())
+            }
+            pap::AUTH_NAK => {
+                println!("[pppoe] auth failure");
+                Ok(())
+            }
+            _ => Err(Error::InvalidPapCode(pap_code)),
         }
     }
 
@@ -917,4 +994,5 @@ struct ClientRef {
     magic_number: u32,
     error: String,
     ip_config: IpConfig,
+    auth_suggestions: u8,
 }

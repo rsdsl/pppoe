@@ -35,6 +35,8 @@ pub enum Error {
     ConfigReject,
     #[error("unexpected lcp terminate-ack")]
     UnexpectedTermAck,
+    #[error("invalid pap code {0}")]
+    InvalidPapCode(u8),
     #[error("invalid chap code {0}")]
     InvalidChapCode(u8),
     #[error("invalid ipcp code {0}")]
