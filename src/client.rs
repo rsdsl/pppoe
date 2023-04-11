@@ -428,7 +428,7 @@ impl Client {
         self.new_pap_packet(auth_req)?;
         self.send(auth_req)?;
 
-        println!("[pppoe] send PAP authentication request");
+        println!("[pppoe] send pap authentication request");
         Ok(())
     }
 
@@ -701,7 +701,7 @@ impl Client {
                 self.new_chap_packet(response)?;
                 self.send(response)?;
 
-                println!("[pppoe] solve CHAP-MD5 challenge");
+                println!("[pppoe] solve chap-md5 challenge");
                 Ok(())
             }
             chap::SUCCESS => {
