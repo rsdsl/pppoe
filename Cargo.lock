@@ -925,7 +925,7 @@ dependencies = [
 
 [[package]]
 name = "rsdsl_pppoe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "byteorder",
  "md5",
