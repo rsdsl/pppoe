@@ -25,7 +25,13 @@ where
 fn tun2ppp(tx: mpsc::Sender<Option<Vec<u8>>>, tun: Arc<Iface>) -> Result<()> {
     loop {
         let mut buf = [0; 4 + 1492];
-        let n = tun.recv(&mut buf)?;
+        let n = match tun.recv(&mut buf) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("[pppoe] tun2ppp warning: {}", e);
+                continue;
+            }
+        };
         let buf = &buf[..n];
 
         let ether_type = NE::read_u16(&buf[2..4]);
@@ -50,7 +56,13 @@ fn ppp2tun(rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>, tun: Arc<Iface>) -> Result<(
     while let Ok(mut buf) = rx.recv() {
         buf = prepend(buf, &packet_info);
 
-        let n = tun.send(&buf)?;
+        let n = match tun.send(&buf) {
+            Ok(v) => v,
+            Err(e) => {
+                println!("[pppoe] ppp2tun warning: {}", e);
+                continue;
+            }
+        };
         if n != buf.len() {
             return Err(Error::PartialTransmission);
         }
