@@ -6,7 +6,6 @@ use std::fs::File;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 use pppoe::packet::IPV4;
@@ -75,10 +74,8 @@ fn main() -> Result<()> {
 
     println!("[pppoe] read config, launch on interface {}", config.link);
 
-    while !link::is_up(config.link.clone())? {
-        println!("[pppoe] wait for {} to come up", config.link);
-        thread::sleep(Duration::from_secs(8));
-    }
+    println!("[pppoe] wait for up {}", config.link);
+    link::wait_up(config.link.clone())?;
 
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
 
