@@ -2,6 +2,7 @@ use rsdsl_pppoe::client::Client;
 use rsdsl_pppoe::config::Config;
 use rsdsl_pppoe::error::{Error, Result};
 
+use std::cmp::min;
 use std::fs::File;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -15,6 +16,7 @@ use rsdsl_netlinkd::link;
 use tun_tap::{Iface, Mode};
 
 const IPPROTO_TCP: u8 = 0x06;
+const MAX_MSS: u16 = 1452;
 
 fn prepend<T>(v: Vec<T>, s: &[T]) -> Vec<T>
 where
@@ -40,8 +42,8 @@ fn clamp_mss_if_needed(buf: &mut [u8]) -> Result<()> {
             for opt in tcp_header.options_iterator() {
                 match opt {
                     Ok(mut opt) => {
-                        if let TcpOptionElement::MaximumSegmentSize(_) = opt {
-                            opt = TcpOptionElement::MaximumSegmentSize(1492);
+                        if let TcpOptionElement::MaximumSegmentSize(mss) = opt {
+                            opt = TcpOptionElement::MaximumSegmentSize(min(mss, MAX_MSS));
                         }
 
                         opts.push(opt);
