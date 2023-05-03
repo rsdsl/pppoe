@@ -940,7 +940,7 @@ dependencies = [
 
 [[package]]
 name = "rsdsl_pppoe"
-version = "0.1.3"
+version = "0.1.2"
 dependencies = [
  "byteorder",
  "etherparse",
