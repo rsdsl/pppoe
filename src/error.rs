@@ -65,12 +65,6 @@ pub enum Error {
     Pppoe(pppoe::error::Error),
     #[error("pppoe parse error: {0:?}")]
     PppoeParse(pppoe::error::ParseError),
-    #[error("etherparse read error: {0}")]
-    EtherParseRead(#[from] etherparse::ReadError),
-    #[error("etherparse tcp option write error: {0}")]
-    EtherParseTcpOptionWrite(#[from] etherparse::TcpOptionWriteError),
-    #[error("etherparse value error: {0}")]
-    EtherParseValue(#[from] etherparse::ValueError),
     #[error("rsdsl_netlinkd error")]
     RsdslNetlinkd(#[from] rsdsl_netlinkd::error::Error),
     #[error("serde_json error")]
