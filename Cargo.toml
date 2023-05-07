@@ -13,7 +13,7 @@ md5 = "0.7.0"
 pppoe = { git = "https://github.com/rsdsl/pppoe-rs.git", version = "0.1.0", features = ["socket"] }
 rand = "0.8.5"
 rsdsl_ip_config = { git = "https://github.com/rsdsl/ip_config.git", version = "0.1.0" }
-rsdsl_netlinkd = { git = "https://github.com/rsdsl/netlinkd.git", version = "0.2.0" }
+rsdsl_netlinkd = { git = "https://github.com/rsdsl/netlinkd.git", version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
