@@ -15,6 +15,8 @@ pub enum Error {
     PartialTransmission,
     #[error("too many retransmissions: {0}")]
     TooManyRetransmissions(String),
+    #[error("authentication timeout")]
+    AuthTimeout,
     #[error("invalid pkt code {0}")]
     InvalidCode(u8),
     #[error("unexpected pads")]
