@@ -121,7 +121,10 @@ fn main() -> Result<()> {
 
         let clt = Client::new(config.clone())?;
 
-        clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx.clone())?;
+        match clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx.clone()) {
+            Ok(_) => {}
+            Err(e) => println!("[pppoe] warning: {}", e),
+        }
 
         send_tx.send(None)?;
         println!("[pppoe] disconnect");
