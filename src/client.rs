@@ -6,7 +6,7 @@ use std::num::NonZeroU16;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use byteorder::{ByteOrder, NetworkEndian as NE};
 
@@ -44,20 +44,6 @@ impl Default for State {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum SessionState {
-    Link,
-    Auth,
-    Network,
-    Open,
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self::Link
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Client {
     inner: Arc<RwLock<ClientRef>>,
@@ -74,7 +60,6 @@ impl Client {
                 started: false,
                 host_uniq: rand::random(),
                 state: State::default(),
-                session_state: SessionState::default(),
                 peer: BROADCAST,
                 magic_number: rand::random(),
                 error: String::new(),
@@ -173,16 +158,8 @@ impl Client {
         self.inner.read().unwrap().state
     }
 
-    fn session_state(&self) -> SessionState {
-        self.inner.read().unwrap().session_state
-    }
-
     fn set_state(&self, state: State) {
         self.inner.write().unwrap().state = state;
-    }
-
-    fn set_session_state(&self, state: SessionState) {
-        self.inner.write().unwrap().session_state = state;
     }
 
     fn session_id(&self) -> Result<NonZeroU16> {
@@ -342,31 +319,6 @@ impl Client {
         });
     }
 
-    fn send_timeout(&self, buf: &[u8], state: SessionState, msg: impl Into<String>) {
-        const MAX: u8 = 10;
-
-        let this = self.clone();
-        let buf = buf.to_vec();
-        let msg = msg.into();
-
-        thread::spawn(move || {
-            let mut i = 1;
-            while this.session_state() == state && i <= MAX {
-                match this.send(&buf) {
-                    Ok(_) => println!("[pppoe] (re)transmit {}/{}: {}", i, MAX, &msg),
-                    Err(e) => println!("[pppoe] (re)transmit {}/{} error: {}", i, MAX, e),
-                }
-
-                thread::sleep(Duration::from_secs(3));
-                i += 1
-            }
-
-            if i > MAX {
-                this.terminate(Err(Error::TooManyRetransmissions(msg)));
-            }
-        });
-    }
-
     fn recv<'a>(&'a self, buf: &'a mut [u8; BUFSIZE]) -> Result<Packet> {
         let mut n;
 
@@ -445,8 +397,9 @@ impl Client {
         lcp::HeaderBuilder::create_configure_request(&mut request[22..26 + limit])?;
 
         self.new_lcp_packet(request)?;
-        self.send_timeout(request, SessionState::Link, "lcp configure-req");
+        self.send(request)?;
 
+        println!("[pppoe] send lcp configure-req");
         Ok(())
     }
 
@@ -473,8 +426,9 @@ impl Client {
         pap::HeaderBuilder::create_auth_request(&mut auth_req[22..])?;
 
         self.new_pap_packet(auth_req)?;
-        self.send_timeout(auth_req, SessionState::Auth, "pap authentication request");
+        self.send(auth_req)?;
 
+        println!("[pppoe] send pap authentication request");
         Ok(())
     }
 
@@ -503,8 +457,9 @@ impl Client {
         ipcp::HeaderBuilder::create_configure_request(&mut request[22..26 + limit])?;
 
         self.new_ipcp_packet(request)?;
-        self.send_timeout(request, SessionState::Network, "ipcp configure-req");
+        self.send(request)?;
 
+        println!("[pppoe] send ipcp configure-req");
         Ok(())
     }
 
@@ -544,22 +499,6 @@ impl Client {
                 println!("[pppoe] recv lcp configure-req, opts: {:?}", opts);
 
                 if auth_is_supported {
-                    self.set_session_state(SessionState::Auth);
-
-                    let this = self.clone();
-                    thread::spawn(move || {
-                        let start = Instant::now();
-                        while this.session_state() == SessionState::Auth
-                            && start.duration_since(Instant::now()).as_secs() < 10
-                        {
-                            thread::sleep(Duration::from_secs(1));
-                        }
-
-                        if this.session_state() == SessionState::Auth {
-                            this.terminate(Err(Error::AuthTimeout));
-                        }
-                    });
-
                     let limit = lcp.payload().len();
 
                     let mut ack = Vec::new();
@@ -717,8 +656,6 @@ impl Client {
             pap::AUTH_ACK => {
                 println!("[pppoe] auth success");
 
-                self.set_session_state(SessionState::Network);
-
                 self.configure_ip()?;
                 Ok(())
             }
@@ -769,8 +706,6 @@ impl Client {
             }
             chap::SUCCESS => {
                 println!("[pppoe] auth success");
-
-                self.set_session_state(SessionState::Network);
 
                 self.configure_ip()?;
                 Ok(())
@@ -868,8 +803,6 @@ impl Client {
                         }
                     })
                     .ok_or(Error::MissingSecondaryDns)?;
-
-                self.set_session_state(SessionState::Open);
 
                 self.set_ip_config(ip_config);
                 tx.send(ip_config)?;
@@ -1057,7 +990,6 @@ struct ClientRef {
     started: bool,
     host_uniq: [u8; 16],
     state: State,
-    session_state: SessionState,
     peer: [u8; 6],
     magic_number: u32,
     error: String,
