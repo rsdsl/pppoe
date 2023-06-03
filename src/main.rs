@@ -28,7 +28,7 @@ fn tun2ppp(tx: mpsc::Sender<Option<Vec<u8>>>, tun: Arc<Iface>) -> Result<()> {
         let n = match tun.recv(&mut buf) {
             Ok(v) => v,
             Err(e) => {
-                println!("[pppoe] tun2ppp warning: {}", e);
+                println!("tun2ppp warning: {}", e);
                 continue;
             }
         };
@@ -37,7 +37,7 @@ fn tun2ppp(tx: mpsc::Sender<Option<Vec<u8>>>, tun: Arc<Iface>) -> Result<()> {
         let ether_type = NE::read_u16(&buf[2..4]);
         if ether_type != IPV4 {
             println!(
-                "[pppoe] drop outbound non-ipv4 pkt, ethertype: 0x{:04x}",
+                "drop outbound non-ipv4 pkt, ethertype: 0x{:04x}",
                 ether_type
             );
             continue;
@@ -59,7 +59,7 @@ fn ppp2tun(rx: Arc<Mutex<mpsc::Receiver<Vec<u8>>>>, tun: Arc<Iface>) -> Result<(
         let n = match tun.send(&buf) {
             Ok(v) => v,
             Err(e) => {
-                println!("[pppoe] ppp2tun warning: {}", e);
+                println!("ppp2tun warning: {}", e);
                 continue;
             }
         };
@@ -84,9 +84,9 @@ fn main() -> Result<()> {
     let mut file = File::open("/data/pppoe.conf")?;
     let config: Config = serde_json::from_reader(&mut file)?;
 
-    println!("[pppoe] read config, launch on interface {}", config.link);
+    println!("read config, launch on interface {}", config.link);
 
-    println!("[pppoe] wait for up {}", config.link);
+    println!("wait for up {}", config.link);
     link::wait_up(config.link.clone())?;
 
     let tun = Arc::new(Iface::new("rsppp0", Mode::Tun)?);
@@ -117,16 +117,16 @@ fn main() -> Result<()> {
     });
 
     loop {
-        println!("[pppoe] connect");
+        println!("connect");
 
         let clt = Client::new(config.clone())?;
 
         match clt.run(recv_tx.clone(), send_rx.clone(), ipchange_tx.clone()) {
             Ok(_) => {}
-            Err(e) => println!("[pppoe] warning: {}", e),
+            Err(e) => println!("warning: {}", e),
         }
 
         send_tx.send(None)?;
-        println!("[pppoe] disconnect");
+        println!("disconnect");
     }
 }

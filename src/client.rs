@@ -90,7 +90,7 @@ impl Client {
                                 Error::NoSession => {}
                                 Error::Disconnected => {}
                                 _ => {
-                                    println!("[pppoe] ip transmit error: {}", e);
+                                    println!("ip transmit error: {}", e);
                                 }
                             },
                         },
@@ -287,8 +287,8 @@ impl Client {
         thread::spawn(move || {
             while this.state() == state {
                 match this.send(&buf) {
-                    Ok(_) => println!("[pppoe] (re)transmit {}", &msg),
-                    Err(e) => println!("[pppoe] (re)transmit error: {}", e),
+                    Ok(_) => println!("(re)transmit {}", &msg),
+                    Err(e) => println!("(re)transmit error: {}", e),
                 }
 
                 thread::sleep(Duration::from_secs(3));
@@ -305,8 +305,8 @@ impl Client {
             let mut i = 1;
             while this.state() == state && i <= max {
                 match this.send(&buf) {
-                    Ok(_) => println!("[pppoe] (re)transmit {}/{}: {}", i, max, &msg),
-                    Err(e) => println!("[pppoe] (re)transmit {}/{} error: {}", i, max, e),
+                    Ok(_) => println!("(re)transmit {}/{}: {}", i, max, &msg),
+                    Err(e) => println!("(re)transmit {}/{} error: {}", i, max, e),
                 }
 
                 thread::sleep(Duration::from_secs(3));
@@ -371,7 +371,7 @@ impl Client {
         self.new_discovery_packet(&mut discovery)?;
         self.send_while_state(&discovery, State::Discovery, "padi");
 
-        println!("[pppoe] send padi");
+        println!("send padi");
         Ok(())
     }
 
@@ -399,7 +399,7 @@ impl Client {
         self.new_lcp_packet(request)?;
         self.send(request)?;
 
-        println!("[pppoe] send lcp configure-req");
+        println!("send lcp configure-req");
         Ok(())
     }
 
@@ -428,7 +428,7 @@ impl Client {
         self.new_pap_packet(auth_req)?;
         self.send(auth_req)?;
 
-        println!("[pppoe] send pap authentication request");
+        println!("send pap authentication request");
         Ok(())
     }
 
@@ -459,7 +459,7 @@ impl Client {
         self.new_ipcp_packet(request)?;
         self.send(request)?;
 
-        println!("[pppoe] send ipcp configure-req");
+        println!("send ipcp configure-req");
         Ok(())
     }
 
@@ -496,7 +496,7 @@ impl Client {
                         || *opt == lcp::ConfigOption::AuthProtocol(auth::Protocol::Pap)
                 });
 
-                println!("[pppoe] recv lcp configure-req, opts: {:?}", opts);
+                println!("recv lcp configure-req, opts: {:?}", opts);
 
                 if auth_is_supported {
                     let limit = lcp.payload().len();
@@ -515,7 +515,7 @@ impl Client {
                     self.new_lcp_packet(ack)?;
                     self.send(ack)?;
 
-                    println!("[pppoe] ack lcp configure-req, opts: {:?}", opts);
+                    println!("ack lcp configure-req, opts: {:?}", opts);
 
                     let auth_is_pap = opts
                         .iter()
@@ -565,7 +565,7 @@ impl Client {
                     self.new_lcp_packet(nak)?;
                     self.send(nak)?;
 
-                    println!("[pppoe] nak lcp configure-req, opts: {:?}", resp_opts);
+                    println!("nak lcp configure-req, opts: {:?}", resp_opts);
                 }
 
                 Ok(())
@@ -581,14 +581,14 @@ impl Client {
                     return Err(Error::AckedWrongOptions);
                 }
 
-                println!("[pppoe] recv configure-ack, opts: {:?}", opts);
+                println!("recv configure-ack, opts: {:?}", opts);
                 Ok(())
             }
             lcp::CONFIGURE_NAK => {
                 let opts: Vec<lcp::ConfigOption> =
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
-                println!("[pppoe] recv lcp configure-nak, opts: {:?}", opts);
+                println!("recv lcp configure-nak, opts: {:?}", opts);
 
                 self.terminate(Err(Error::ConfigNak));
                 Ok(())
@@ -597,7 +597,7 @@ impl Client {
                 let opts: Vec<lcp::ConfigOption> =
                     lcp::ConfigOptionIterator::new(lcp.payload()).collect();
 
-                println!("[pppoe] recv lcp configure-reject, opts: {:?}", opts);
+                println!("recv lcp configure-reject, opts: {:?}", opts);
 
                 self.terminate(Err(Error::ConfigReject));
                 Ok(())
@@ -630,7 +630,7 @@ impl Client {
 
                 self.set_state(State::Terminated);
 
-                println!("[pppoe] ack lcp terminate-req, reason: {}", reason);
+                println!("ack lcp terminate-req, reason: {}", reason);
                 Ok(())
             }
             lcp::TERMINATE_ACK => {
@@ -641,7 +641,7 @@ impl Client {
                 self.inner.write().unwrap().error = format!("{:?}", Error::UnexpectedTermAck);
                 self.set_state(State::Terminated);
 
-                println!("[pppoe] recv unexpected lcp terminate-ack");
+                println!("recv unexpected lcp terminate-ack");
                 Ok(())
             }
             _ => Err(Error::InvalidLcpCode(lcp_code)),
@@ -654,13 +654,13 @@ impl Client {
 
         match pap_code {
             pap::AUTH_ACK => {
-                println!("[pppoe] auth success");
+                println!("auth success");
 
                 self.configure_ip()?;
                 Ok(())
             }
             pap::AUTH_NAK => {
-                println!("[pppoe] auth failure");
+                println!("auth failure");
                 Ok(())
             }
             _ => Err(Error::InvalidPapCode(pap_code)),
@@ -701,17 +701,17 @@ impl Client {
                 self.new_chap_packet(response)?;
                 self.send(response)?;
 
-                println!("[pppoe] solve chap-md5 challenge");
+                println!("solve chap-md5 challenge");
                 Ok(())
             }
             chap::SUCCESS => {
-                println!("[pppoe] auth success");
+                println!("auth success");
 
                 self.configure_ip()?;
                 Ok(())
             }
             chap::FAILURE => {
-                println!("[pppoe] auth failure");
+                println!("auth failure");
                 Ok(())
             }
             _ => Err(Error::InvalidChapCode(chap_code)),
@@ -727,7 +727,7 @@ impl Client {
                 let opts: Vec<ipcp::ConfigOption> =
                     ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
 
-                println!("[pppoe] recv ipcp configure-req, opts: {:?}", opts);
+                println!("recv ipcp configure-req, opts: {:?}", opts);
 
                 let mut ip_config = self.ip_config();
 
@@ -761,7 +761,7 @@ impl Client {
                 self.new_ipcp_packet(ack)?;
                 self.send(ack)?;
 
-                println!("[pppoe] ack ipcp configure-req, opts: {:?}", opts);
+                println!("ack ipcp configure-req, opts: {:?}", opts);
 
                 Ok(())
             }
@@ -807,9 +807,9 @@ impl Client {
                 self.set_ip_config(ip_config);
                 tx.send(ip_config)?;
 
-                println!("[pppoe] recv ipcp configure-ack, opts: {:?}", opts);
+                println!("recv ipcp configure-ack, opts: {:?}", opts);
                 println!(
-                    "[pppoe] open ipcp, addr={}, rtr={}, dns1={}, dns2={}",
+                    "open ipcp, addr={}, rtr={}, dns1={}, dns2={}",
                     ip_config.addr, ip_config.rtr, ip_config.dns1, ip_config.dns2
                 );
                 Ok(())
@@ -818,7 +818,7 @@ impl Client {
                 let opts: Vec<ipcp::ConfigOption> =
                     ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
 
-                println!("[pppoe] recv ipcp configure-nak, opts: {:?}", opts);
+                println!("recv ipcp configure-nak, opts: {:?}", opts);
 
                 let limit = ipcp.payload().len();
 
@@ -833,14 +833,14 @@ impl Client {
                 self.new_ipcp_packet(request)?;
                 self.send(request)?;
 
-                println!("[pppoe] send ipcp configure-req");
+                println!("send ipcp configure-req");
                 Ok(())
             }
             ipcp::CONFIGURE_REJECT => {
                 let opts: Vec<ipcp::ConfigOption> =
                     ipcp::ConfigOptionIterator::new(ipcp.payload()).collect();
 
-                println!("[pppoe] recv ipcp configure-reject, opts: {:?}", opts);
+                println!("recv ipcp configure-reject, opts: {:?}", opts);
 
                 self.terminate(Err(Error::ConfigReject));
                 Ok(())
@@ -904,10 +904,7 @@ impl Client {
                     });
 
                     if self.state() == State::Discovery {
-                        println!(
-                            "[pppoe] recv pado from mac {}, ac {}",
-                            remote_mac_str, ac_name
-                        );
+                        println!("recv pado from mac {}, ac {}", remote_mac_str, ac_name);
 
                         self.set_peer(remote_mac);
 
@@ -925,12 +922,9 @@ impl Client {
                         self.new_discovery_packet(&mut request)?;
                         self.send_while_state_max(&request, State::Requesting, 10, "padr");
 
-                        println!("[pppoe] send padr");
+                        println!("send padr");
                     } else {
-                        println!(
-                            "[pppoe] ignore pado from mac {}, ac {}",
-                            remote_mac_str, ac_name
-                        );
+                        println!("ignore pado from mac {}, ac {}", remote_mac_str, ac_name);
                     }
 
                     Ok(())
@@ -941,7 +935,7 @@ impl Client {
                             NonZeroU16::new(header.session_id()).ok_or(Error::ZeroSession)?;
 
                         self.set_state(State::Session(session_id));
-                        println!("[pppoe] recv pads, id {}", session_id);
+                        println!("recv pads, id {}", session_id);
 
                         thread::sleep(Duration::from_secs(1));
                         self.configure_link()?;
@@ -955,16 +949,13 @@ impl Client {
                     self.set_state(State::Terminated);
                     self.inner.write().unwrap().socket.close();
 
-                    println!("[pppoe] recv padt");
+                    println!("recv padt");
                     return Ok(());
                 }
                 _ => Err(Error::InvalidCode(code)),
             } {
                 Ok(_) => {}
-                Err(e) => println!(
-                    "[pppoe] recv invalid pkt from mac {}: {}",
-                    remote_mac_str, e
-                ),
+                Err(e) => println!("recv invalid pkt from mac {}: {}", remote_mac_str, e),
             }
 
             if self.state() == State::Terminated {
@@ -972,9 +963,9 @@ impl Client {
 
                 let why = self.why_terminated();
                 if why.is_empty() {
-                    println!("[pppoe] session closed");
+                    println!("session closed");
                 } else {
-                    println!("[pppoe] session closed: {}", why);
+                    println!("session closed: {}", why);
                 }
 
                 return Ok(());
