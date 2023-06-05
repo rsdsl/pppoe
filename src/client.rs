@@ -81,10 +81,11 @@ impl Client {
 
             self.discover()?;
 
+            let clt = self.clone();
             thread::spawn(move || {
                 for buf in &*ip_rx.lock().unwrap() {
                     match buf {
-                        Some(buf) => match self.send_ipv4(&buf) {
+                        Some(buf) => match clt.send_ipv4(&buf) {
                             Ok(_) => {}
                             Err(e) => match e {
                                 Error::NoSession => {}
@@ -99,7 +100,15 @@ impl Client {
                 }
             });
 
-            Ok(handle.join().unwrap()?)
+            match handle.join().unwrap() {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    self.set_state(State::Terminated);
+                    self.inner.write().unwrap().socket.close();
+
+                    Err(e)
+                }
+            }
         } else {
             Err(Error::AlreadyActive)
         }

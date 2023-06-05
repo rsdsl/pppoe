@@ -1,6 +1,6 @@
 [package]
 name = "rsdsl_pppoe"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["HimbeerserverDE <himbeerserverde@gmail.com>"]
 license = "MIT"
 edition = "2021"
